@@ -360,7 +360,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="비밀번호 입력 (leeaseo8626)"
+                  placeholder="비밀번호 입력"
                   autoFocus
                   className="w-full border border-[rgba(0,0,0,0.3)] px-3 py-2 text-[13px] focus:outline-none focus:border-black"
                 />
