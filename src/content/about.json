@@ -1,0 +1,13 @@
+{
+  "name": "Lee Hye Jun",
+  "role": "Furniture Designer",
+  "location": "Seoul, KR",
+  "bio": "디지털 제품과 물리적 경험의 접점에서 작업합니다. 사용자 중심의 디자인과 기술적 구현을 연결하는 데 관심이 있습니다.",
+  "profileImage": "/images/profile.jpg",
+  "contact": {
+    "email": "15682@naver.com",
+    "instagram": "",
+    "linkedin": "https://linkedin.com/in/leehyejun",
+    "github": ""
+  }
+}
