@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
 interface VisualFrameProps {
   src?: string;
@@ -17,12 +17,6 @@ export const VisualFrame: React.FC<VisualFrameProps> = ({
   subtitle,
   className = '',
 }) => {
-  const [loadError, setLoadError] = useState(false);
-
-  useEffect(() => {
-    setLoadError(false);
-  }, [src]);
-
   const aspectClass =
     aspectRatio === '1:1'
       ? 'aspect-square'
@@ -176,17 +170,18 @@ export const VisualFrame: React.FC<VisualFrameProps> = ({
 
   return (
     <div className={`relative w-full overflow-hidden bg-[#F5F5F3] ${aspectClass} ${className}`}>
-      {src && !loadError ? (
+      {renderArchitecturalFallback()}
+      {src ? (
         <img
           src={src}
           alt={alt}
-          onError={() => setLoadError(true)}
-          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
           referrerPolicy="no-referrer"
         />
-      ) : (
-        renderArchitecturalFallback()
-      )}
+      ) : null}
     </div>
   );
 };

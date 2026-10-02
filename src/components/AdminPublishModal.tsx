@@ -9,12 +9,6 @@ import {
   getResumeData,
   saveResumeData,
 } from '../lib/content';
-import {
-  saveProjectToCloud,
-  deleteProjectFromCloud,
-  saveAboutToCloud,
-  saveResumeToCloud,
-} from '../lib/firebase';
 import { compressImageFile } from '../lib/imageCompressor';
 import {
   X,
@@ -31,11 +25,10 @@ import {
   FileText,
   Briefcase,
   Loader2,
-  CloudUpload,
 } from 'lucide-react';
 
 interface AdminPublishModalProps {
-  isOpen: boolean;
+  isOpen?: boolean;
   onClose: () => void;
   onProjectAdded: (newProject: WorkProject) => void;
   onAboutUpdated: (newAbout: AboutData) => void;
@@ -43,7 +36,6 @@ interface AdminPublishModalProps {
 }
 
 export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
-  isOpen,
   onClose,
   onProjectAdded,
   onAboutUpdated,
@@ -58,7 +50,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
 
   // Work Sub-tab: 'editor' | 'list'
   const [workTab, setWorkTab] = useState<'editor' | 'list'>('editor');
-  const [projectsList, setProjectsList] = useState<WorkProject[]>([]);
+  const [projectsList, setProjectsList] = useState<WorkProject[]>(getAllProjects);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
 
   // Work Form states
@@ -78,10 +70,10 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const [isCompressing, setIsCompressing] = useState(false);
 
   // About Form states
-  const [aboutForm, setAboutForm] = useState<AboutData>(getAboutData());
+  const [aboutForm, setAboutForm] = useState<AboutData>(getAboutData);
 
   // Resume Form states
-  const [resumeForm, setResumeForm] = useState<ResumeData>(getResumeData());
+  const [resumeForm, setResumeForm] = useState<ResumeData>(getResumeData);
 
   const [isSaved, setIsSaved] = useState(false);
 
@@ -137,16 +129,6 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       reader.readAsText(file);
     }
   };
-
-  useEffect(() => {
-    if (isOpen) {
-      setProjectsList(getAllProjects());
-      setAboutForm(getAboutData());
-      setResumeForm(getResumeData());
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -250,40 +232,9 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setWorkTab('editor');
   };
 
-  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
-  const [syncStatusMsg, setSyncStatusMsg] = useState('');
-
-  const handleSyncAllToCloud = async () => {
-    try {
-      setIsSyncingCloud(true);
-      setSyncStatusMsg('클라우드에 동기화 중...');
-      
-      // 1. Sync about
-      await saveAboutToCloud(aboutForm);
-      // 2. Sync resume
-      await saveResumeToCloud(resumeForm);
-      // 3. Sync all projects
-      const currentProjects = getAllProjects();
-      for (const p of currentProjects) {
-        await saveProjectToCloud(p);
-      }
-      
-      setSyncStatusMsg('동기화 완료!');
-      setTimeout(() => setSyncStatusMsg(''), 4000);
-      alert('현재 데이터(About, Resume, 프로젝트)가 Firebase 클라우드에 성공적으로 동기화되었습니다! 이제 어느 컴퓨터나 모바일에서도 실시간으로 공유됩니다.');
-    } catch (err) {
-      console.error('Cloud sync error:', err);
-      setSyncStatusMsg('동기화 오류');
-      alert('클라우드 동기화 중 오류가 발생했습니다. 네트워크 연결을 확인해주세요.');
-    } finally {
-      setIsSyncingCloud(false);
-    }
-  };
-
   const handleDeleteProject = (slugToDelete: string) => {
     if (confirm('정말 이 프로젝트를 삭제하시겠습니까?')) {
       deleteCustomProject(slugToDelete);
-      deleteProjectFromCloud(slugToDelete).catch((err) => console.warn('Cloud delete error:', err));
       const updated = getAllProjects();
       setProjectsList(updated);
       if (editingSlug === slugToDelete) {
@@ -350,7 +301,6 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     };
 
     saveCustomProject(projectData);
-    saveProjectToCloud(projectData).catch((err) => console.warn('Cloud project save error:', err));
     onProjectAdded(projectData);
     setIsSaved(true);
 
@@ -364,7 +314,6 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
   const handleSaveAbout = (e: React.FormEvent) => {
     e.preventDefault();
     saveAboutData(aboutForm);
-    saveAboutToCloud(aboutForm).catch((err) => console.warn('Cloud about save error:', err));
     onAboutUpdated(aboutForm);
     setIsSaved(true);
     setTimeout(() => {
@@ -377,7 +326,6 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
   const handleSaveResume = (e: React.FormEvent) => {
     e.preventDefault();
     saveResumeData(resumeForm);
-    saveResumeToCloud(resumeForm).catch((err) => console.warn('Cloud resume save error:', err));
     onResumeUpdated(resumeForm);
     setIsSaved(true);
     setTimeout(() => {
@@ -1139,23 +1087,13 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
           )}
         </div>
 
-        {/* Discreet Data Sync & Transfer Bar (내보내기 / 불러오기 & Firebase 클라우드 동기화) */}
+        {/* Discreet Data Sync & Transfer Bar (내보내기 / 불러오기) */}
         {isAuthenticated && (
-          <div className="px-5 py-3 bg-neutral-50 border-t border-[rgba(0,0,0,0.1)] flex flex-col sm:flex-row items-center justify-between gap-2.5 text-[11.5px] text-[rgba(0,0,0,0.6)]">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSyncAllToCloud}
-                disabled={isSyncingCloud}
-                className="bg-black text-white px-3 py-1.5 flex items-center gap-1.5 hover:bg-neutral-800 transition-colors cursor-pointer font-normal disabled:opacity-50"
-                title="현재 컴퓨터에서 수정한 모든 내용을 Firebase 클라우드에 올려 다른 기기 및 공유 링크에 즉시 실시간 반영합니다"
-              >
-                {isSyncingCloud ? <Loader2 size={12} className="animate-spin" /> : <CloudUpload size={13} />}
-                <span>{syncStatusMsg || '⚡ Firebase 클라우드 전체 동기화'}</span>
-              </button>
+          <div className="px-5 py-2.5 bg-neutral-50 border-t border-[rgba(0,0,0,0.1)] flex flex-wrap items-center justify-between text-[11px] text-[rgba(0,0,0,0.6)]">
+            <div className="flex items-center gap-1.5">
+              <span>💡 다른 컴퓨터로 옮기거나 백업할 때:</span>
             </div>
-
-            <div className="flex items-center gap-2 text-[11px]">
+            <div className="flex items-center gap-2">
               <input
                 type="file"
                 accept=".json"
@@ -1166,17 +1104,17 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               <button
                 type="button"
                 onClick={() => importFileInputRef.current?.click()}
-                className="underline hover:text-black cursor-pointer"
+                className="underline hover:text-black cursor-pointer font-medium"
               >
-                [백업파일 불러오기]
+                [데이터 불러오기 (Import)]
               </button>
               <span>·</span>
               <button
                 type="button"
                 onClick={handleExportData}
-                className="underline hover:text-black cursor-pointer"
+                className="underline hover:text-black cursor-pointer font-medium"
               >
-                [JSON 백업 내보내기]
+                [전체 데이터 백업 (Export)]
               </button>
             </div>
           </div>

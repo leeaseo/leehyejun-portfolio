@@ -26,6 +26,10 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ errorInfo });
   }
 
+  private handleRetry = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
+  };
+
   private handleResetCache = () => {
     try {
       localStorage.removeItem('leehyejun_custom_about');
@@ -59,10 +63,10 @@ export class ErrorBoundary extends Component<Props, State> {
             )}
             <div className="pt-2 flex flex-col sm:flex-row gap-2">
               <button
-                onClick={this.handleReload}
+                onClick={this.handleRetry}
                 className="flex-1 bg-black text-white py-2 text-[13px] hover:bg-neutral-800 transition-colors cursor-pointer"
               >
-                새로고침
+                다시 시도 (복구)
               </button>
               <button
                 onClick={this.handleResetCache}

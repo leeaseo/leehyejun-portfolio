@@ -8,28 +8,16 @@ import {
   getResumeData,
   getAllProjects,
   getProjectBySlug,
-  saveAboutData,
-  saveResumeData,
-  saveCustomProject,
-  getCustomProjects,
 } from './lib/content';
-import {
-  subscribeToFirestoreProjects,
-  subscribeToFirestoreAbout,
-  subscribeToFirestoreResume,
-  saveAboutToCloud,
-  saveResumeToCloud,
-  saveProjectToCloud,
-} from './lib/firebase';
 import { WorkProject, AboutData, ResumeData } from './lib/types';
 import { Plus } from 'lucide-react';
 
 type MobileTab = 'about' | 'work' | 'more';
 
 export default function App() {
-  const [aboutData, setAboutData] = useState<AboutData>(getAboutData());
-  const [resumeData, setResumeData] = useState<ResumeData>(getResumeData());
-  const [projectsList, setProjectsList] = useState<WorkProject[]>([]);
+  const [aboutData, setAboutData] = useState<AboutData>(getAboutData);
+  const [resumeData, setResumeData] = useState<ResumeData>(getResumeData);
+  const [projectsList, setProjectsList] = useState<WorkProject[]>(getAllProjects);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   // Default to first project (Mobile Display System)
@@ -37,83 +25,6 @@ export default function App() {
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('work');
-
-  // Load content initially
-  useEffect(() => {
-    setProjectsList(getAllProjects());
-    setAboutData(getAboutData());
-    setResumeData(getResumeData());
-  }, []);
-
-  // Auto-upload PC local edits to Firestore on load so Mobile immediately gets them!
-  useEffect(() => {
-    try {
-      const localAboutRaw = localStorage.getItem('leehyejun_custom_about');
-      if (localAboutRaw) {
-        saveAboutToCloud(getAboutData()).catch((e) => console.warn('Auto-sync about error:', e));
-      }
-
-      const localResumeRaw = localStorage.getItem('leehyejun_custom_resume');
-      if (localResumeRaw) {
-        saveResumeToCloud(getResumeData()).catch((e) => console.warn('Auto-sync resume error:', e));
-      }
-
-      const localProjects = getCustomProjects();
-      if (Array.isArray(localProjects) && localProjects.length > 0) {
-        localProjects.forEach((proj) => {
-          if (proj && proj.slug) {
-            saveProjectToCloud(proj).catch((e) => console.warn('Auto-sync project error:', e));
-          }
-        });
-      }
-    } catch (err) {
-      console.warn('Auto-sync error:', err);
-    }
-  }, []);
-
-  // Realtime Cloud Sync via Firebase Firestore (PC & Mobile stay 100% in sync)
-  useEffect(() => {
-    // 1. Projects subscription
-    const unsubscribeProjects = subscribeToFirestoreProjects((cloudProjects) => {
-      if (Array.isArray(cloudProjects) && cloudProjects.length > 0) {
-        const base = getAllProjects();
-        const map = new Map<string, WorkProject>();
-        base.forEach((p) => {
-          if (p && p.slug) map.set(p.slug, p);
-        });
-        cloudProjects.forEach((cp) => {
-          if (cp && cp.slug) {
-            map.set(cp.slug, cp);
-            saveCustomProject(cp); // Cache locally on Mobile too
-          }
-        });
-        const merged = Array.from(map.values()).sort((a, b) => (a.order || 99) - (b.order || 99));
-        setProjectsList(merged);
-      }
-    });
-
-    // 2. About subscription
-    const unsubscribeAbout = subscribeToFirestoreAbout((cloudAbout) => {
-      if (cloudAbout) {
-        setAboutData(cloudAbout);
-        saveAboutData(cloudAbout); // Cache locally on Mobile too
-      }
-    });
-
-    // 3. Resume subscription
-    const unsubscribeResume = subscribeToFirestoreResume((cloudResume) => {
-      if (cloudResume) {
-        setResumeData(cloudResume);
-        saveResumeData(cloudResume); // Cache locally on Mobile too
-      }
-    });
-
-    return () => {
-      unsubscribeProjects();
-      unsubscribeAbout();
-      unsubscribeResume();
-    };
-  }, []);
 
   // Read URL hash on load and handle hash changes
   useEffect(() => {
@@ -172,7 +83,7 @@ export default function App() {
   };
 
   const activeProject = activeProjectSlug
-    ? projectsList.find((p) => p.slug === activeProjectSlug) || getProjectBySlug(activeProjectSlug) || null
+    ? projectsList.find((p) => p && p.slug === activeProjectSlug) || getProjectBySlug(activeProjectSlug) || null
     : null;
 
   return (
@@ -180,85 +91,63 @@ export default function App() {
       {/* Mobile Top Navigation (only visible on mobile/tablet viewports) */}
       <div className="lg:hidden h-9 px-4 border-b border-[rgba(0,0,0,0.15)] flex items-center justify-between bg-white sticky top-0 z-30 shrink-0">
         <div className="text-[13px] font-normal text-black">Lee Hye Jun</div>
-        <div className="flex items-center gap-3 text-[13px] font-normal">
+        <div className="flex items-center gap-1 text-[13px]">
           <button
             onClick={() => setMobileTab('about')}
-            className={`transition-colors ${
-              mobileTab === 'about' ? 'text-black font-normal underline' : 'text-[rgba(0,0,0,0.5)]'
+            className={`px-2 py-0.5 cursor-pointer font-normal ${
+              mobileTab === 'about' ? 'text-black underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)]'
             }`}
           >
             About
           </button>
+          <span className="text-[rgba(0,0,0,0.2)]">/</span>
           <button
             onClick={() => setMobileTab('work')}
-            className={`transition-colors ${
-              mobileTab === 'work' ? 'text-black font-normal underline' : 'text-[rgba(0,0,0,0.5)]'
+            className={`px-2 py-0.5 cursor-pointer font-normal ${
+              mobileTab === 'work' ? 'text-black underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)]'
             }`}
           >
             Work
           </button>
+          <span className="text-[rgba(0,0,0,0.2)]">/</span>
           <button
             onClick={() => setMobileTab('more')}
-            className={`transition-colors ${
-              mobileTab === 'more' ? 'text-black font-normal underline' : 'text-[rgba(0,0,0,0.5)]'
+            className={`px-2 py-0.5 cursor-pointer font-normal ${
+              mobileTab === 'more' ? 'text-black underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)]'
             }`}
           >
-            More {activeProjectSlug && '●'}
+            More
           </button>
         </div>
       </div>
 
-      {/* 3-Column Layout: 좌측 / 중앙 / 우측 넓이 동일하게 (1:1:1 = lg:w-1/3) */}
-      <main className="flex-1 w-full h-[calc(100vh-2.25rem)] lg:h-screen flex flex-col lg:flex-row overflow-hidden">
-        {/* ============================================================== */}
-        {/* COLUMN 1 (LEFT): About / Resume (정확히 1/3 너비, 좌측 고정 독립스크롤) */}
-        {/* ============================================================== */}
+      {/* Main 3-Column Grid Container */}
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-12 min-h-0 overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[rgba(0,0,0,0.15)]">
+        {/* Column 1: About & Resume (Left - 3 cols) */}
         <section
-          className={`w-full lg:w-1/3 lg:h-full lg:overflow-y-auto custom-scrollbar lg:border-r border-[rgba(0,0,0,0.15)] shrink-0 flex flex-col justify-between ${
-            mobileTab === 'about' ? 'block' : 'hidden lg:flex'
+          className={`h-full overflow-y-auto lg:col-span-3 ${
+            mobileTab === 'about' ? 'block' : 'hidden lg:block'
           }`}
         >
-          <div>
-            <AboutResumeColumn
-              aboutData={aboutData}
-              resumeData={resumeData}
-            />
-          </div>
-
-          {/* Discreet Admin / Publish trigger for leehyejun */}
-          <div className="p-4 border-t border-[rgba(0,0,0,0.08)] bg-white flex items-center justify-between text-[11px] text-[rgba(0,0,0,0.35)] shrink-0">
-            <span>© Lee Hye Jun 2026</span>
-            <button
-              onClick={() => setIsAdminOpen(true)}
-              className="text-[11px] text-[rgba(0,0,0,0.4)] hover:text-black underline flex items-center gap-1 cursor-pointer font-normal"
-              title="관리자 전용 패널 (leehyejun)"
-            >
-              <Plus size={10} />
-              <span>Admin / + Add Work</span>
-            </button>
-          </div>
+          <AboutResumeColumn aboutData={aboutData} resumeData={resumeData} />
         </section>
 
-        {/* ============================================================== */}
-        {/* COLUMN 2 (MIDDLE): Work (정확히 1/3 너비, 단독 세로 스크롤 가능) */}
-        {/* ============================================================== */}
+        {/* Column 2: Work (Middle - 5 cols) */}
         <section
-          className={`w-full lg:w-1/3 lg:h-full lg:overflow-y-auto custom-scrollbar lg:border-r border-[rgba(0,0,0,0.15)] shrink-0 overscroll-contain ${
+          className={`h-full overflow-y-auto lg:col-span-5 ${
             mobileTab === 'work' ? 'block' : 'hidden lg:block'
           }`}
         >
           <WorkColumn
-            projects={projectsList.length > 0 ? projectsList : getAllProjects()}
+            projects={projectsList}
             activeSlug={activeProjectSlug}
             onSelectProject={handleSelectProject}
           />
         </section>
 
-        {/* ============================================================== */}
-        {/* COLUMN 3 (RIGHT): More (정확히 1/3 너비, 단독 세로 스크롤 가능)  */}
-        {/* ============================================================== */}
+        {/* Column 3: More (Right - 4 cols) */}
         <section
-          className={`w-full lg:w-1/3 lg:h-full lg:overflow-y-auto custom-scrollbar shrink-0 overscroll-contain ${
+          className={`h-full overflow-y-auto lg:col-span-4 ${
             mobileTab === 'more' ? 'block' : 'hidden lg:block'
           }`}
         >
@@ -267,21 +156,39 @@ export default function App() {
             onClearActiveProject={handleClearActiveProject}
           />
         </section>
-      </main>
+      </div>
 
-      {/* Admin Publishing Modal for Site Owner */}
-      <AdminPublishModal
-        isOpen={isAdminOpen}
-        onClose={() => {
-          setIsAdminOpen(false);
-          setProjectsList(getAllProjects());
-          setAboutData(getAboutData());
-          setResumeData(getResumeData());
-        }}
-        onProjectAdded={handleProjectAdded}
-        onAboutUpdated={handleAboutUpdated}
-        onResumeUpdated={handleResumeUpdated}
-      />
+      {/* Discreet Admin Publish Trigger in bottom-right corner */}
+      <footer className="h-8 border-t border-[rgba(0,0,0,0.1)] px-4 flex items-center justify-between text-[11px] text-[rgba(0,0,0,0.4)] bg-white shrink-0 select-none">
+        <div>
+          © {new Date().getFullYear()} Lee Hye Jun. All rights reserved.
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsAdminOpen(true)}
+            className="flex items-center gap-1 text-[11px] text-[rgba(0,0,0,0.5)] hover:text-black border border-[rgba(0,0,0,0.2)] hover:border-black px-2 py-0.5 transition-colors cursor-pointer"
+          >
+            <Plus size={10} />
+            <span>Admin / + Add Work</span>
+          </button>
+        </div>
+      </footer>
+
+      {/* Admin Publish Modal */}
+      {isAdminOpen && (
+        <AdminPublishModal
+          isOpen={isAdminOpen}
+          onClose={() => {
+            setIsAdminOpen(false);
+            setProjectsList(getAllProjects());
+            setAboutData(getAboutData());
+            setResumeData(getResumeData());
+          }}
+          onProjectAdded={handleProjectAdded}
+          onAboutUpdated={handleAboutUpdated}
+          onResumeUpdated={handleResumeUpdated}
+        />
+      )}
     </div>
   );
 }
