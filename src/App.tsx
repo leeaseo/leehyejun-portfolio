@@ -30,8 +30,11 @@ export default function App() {
     }
   });
 
-  // Default to first project (Mobile Display System)
-  const [activeProjectSlug, setActiveProjectSlug] = useState<string | null>('mobile-display-system');
+  // Default to first project (top of Work column, e.g. 01. 하)
+  const [activeProjectSlug, setActiveProjectSlug] = useState<string | null>(() => {
+    const all = getAllProjects();
+    return all[0]?.slug || null;
+  });
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('work');
@@ -47,6 +50,10 @@ export default function App() {
         if (data) {
           if (Array.isArray(data.projects) && data.projects.length > 0) {
             setProjectsList(data.projects);
+            const currentHash = typeof window !== 'undefined' ? window.location.hash : '';
+            if (!currentHash.includes('more/') && activeProjectSlug !== '__closed__') {
+              setActiveProjectSlug(data.projects[0].slug);
+            }
             try {
               localStorage.setItem('leehyejun_custom_projects', JSON.stringify(data.projects));
             } catch {}
@@ -119,7 +126,7 @@ export default function App() {
   };
 
   const handleClearActiveProject = () => {
-    setActiveProjectSlug(null);
+    setActiveProjectSlug('__closed__');
     setMobileTab('work');
     clearHash();
   };
@@ -147,9 +154,12 @@ export default function App() {
     setResumeData(newResume);
   };
 
-  const activeProject = activeProjectSlug
-    ? projectsList.find((p) => p && p.slug === activeProjectSlug) || getProjectBySlug(activeProjectSlug) || null
-    : null;
+  const activeProject =
+    activeProjectSlug === '__closed__'
+      ? null
+      : activeProjectSlug
+      ? projectsList.find((p) => p && p.slug === activeProjectSlug) || getProjectBySlug(activeProjectSlug) || projectsList[0] || null
+      : projectsList[0] || null;
 
   return (
     <div className="min-h-screen lg:h-screen w-full bg-white text-black flex flex-col font-sans select-text lg:overflow-hidden">
