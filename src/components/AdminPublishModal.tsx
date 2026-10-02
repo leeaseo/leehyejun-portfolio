@@ -62,6 +62,17 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       setIsAuthenticated(propIsAuthenticated);
     }
   }, [propIsAuthenticated]);
+
+  // Auto-select first project (#1) on open so the user is immediately editing #1
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      const list = getAllProjects();
+      setProjectsList(list);
+      if (!editingSlug && list.length > 0) {
+        handleSelectProjectToEdit(list[0]);
+      }
+    }
+  }, [isAuthenticated]);
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -342,8 +353,10 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
       content: content || '프로젝트 상세 내용입니다.',
     };
 
-    saveCustomProject(projectData);
-    setProjectsList(getAllProjects());
+    saveCustomProject(projectData, editingSlug || undefined);
+    const refreshed = getAllProjects();
+    setProjectsList(refreshed);
+    setEditingSlug(finalSlug);
     onProjectAdded(projectData);
     setIsSaved(true);
 
@@ -858,7 +871,48 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
             /* ============================================================== */
             /* 4. WORK PROJECT EDIT / CREATE FORM                            */
             /* ============================================================== */
-            <form onSubmit={handlePublishWork} className="space-y-5">
+            <form onSubmit={handlePublishWork} className="space-y-4">
+              {/* Quick Project Slot Selector Bar */}
+              <div className="space-y-1.5 pb-2 border-b border-[rgba(0,0,0,0.1)]">
+                <div className="flex items-center justify-between text-[11px] text-[rgba(0,0,0,0.5)]">
+                  <span>수정할 프로젝트 슬롯 선택 (순서 고정):</span>
+                  <span className="text-[11px] text-neutral-500 font-mono">제목을 바꿔도 #{order}번 순서는 안전하게 유지됩니다</span>
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                  {projectsList.map((p) => {
+                    const isSelected = editingSlug === p.slug;
+                    return (
+                      <button
+                        key={p.slug}
+                        type="button"
+                        onClick={() => handleSelectProjectToEdit(p)}
+                        className={`px-3 py-1.5 text-[12px] border transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-black text-white border-black font-medium'
+                            : 'bg-white text-black border-[rgba(0,0,0,0.2)] hover:border-black'
+                        }`}
+                      >
+                        <span className={`font-mono ${isSelected ? 'text-neutral-300' : 'text-[rgba(0,0,0,0.45)]'}`}>
+                          #{p.order}
+                        </span>
+                        <span className="max-w-[130px] truncate">{p.title || 'Untitled'}</span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={handleNewProject}
+                    className={`px-3 py-1.5 text-[12px] border border-dashed transition-colors cursor-pointer shrink-0 ${
+                      !editingSlug
+                        ? 'bg-black text-white border-black font-medium'
+                        : 'bg-neutral-50 text-[rgba(0,0,0,0.6)] border-[rgba(0,0,0,0.3)] hover:text-black hover:border-black'
+                    }`}
+                  >
+                    + 새 프로젝트 추가
+                  </button>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between bg-neutral-50 p-2.5 border border-[rgba(0,0,0,0.1)] text-[12px]">
                 <span>
                   {editingSlug ? (

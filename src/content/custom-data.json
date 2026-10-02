@@ -23,7 +23,7 @@
       "materials": "Aluminum Extrusions, Stainless Steel Hardware",
       "dimensions": "Various Dimensions",
       "externalUrl": "https://leehyejun.com/work/mobile-display-system",
-      "order": 1,
+      "order": 2,
       "content": "This project was designed and built for The New School alongside Ryan Mo.\n\nFor this project, the client requested a mobile and modular system for the display of merchandise that could collapse and deploy within any given space. Our approach focused on the development of various modules each fulfilling a different need. These modules include shelving, clothing racks, mirrors, tables, platforms, and a point of sale. Deployed together, the space assumes the function of a complete retail environment supporting the displaying and shopping of an assortment of goods.\n\nThe most critical design challenge was collapsing this complete retail environment into an easily mobile and deployable system. For the client, this meant it must be transported and deployed by a single person. This resulted in strict size and weight constraints.\n\nOur solution turns the point of sale module into a means of transportation, where it becomes a cart-like structure, onto which the other modules are collapsed and stacked, allowing the full system to fit through doors and hallways, and inside any standard elevator. This 3ft x 3ft x 6ft package deploys to fill a space up to roughly 500sq ft. It is an entire store on wheels.\n\nImportantly, this process of transportation and deployment should be easy and simple. It is very intentionally not a process of assembly or construction. All interaction is reduced to simple gestures like turning, folding, snapping, setting, etc. There are no tools required, and the entire process can be completed by a single individual in a matter of minutes with very little explanation.\n\nPhotographed by Colin Padulo in addition to Ryan and Myself."
     },
     {
@@ -38,7 +38,7 @@
       "materials": "6061 Aluminum, Polyurethane, Steel Springs, Paracord",
       "dimensions": "36” × 72” × 32”",
       "externalUrl": "https://leehyejun.com/work/seating-for-doing-nothing",
-      "order": 2,
+      "order": 3,
       "content": "## 개념 및 의도 (Concept & Intent)\n\n생산성과 효율성만을 강요하는 현대의 인체공학 가구 패러다임에 반문하는 라운지 구조물입니다. 신체가 특정 자세를 강요받지 않고, 중력에 몸을 맡긴 채 온전히 무위(Nothing)의 상태로 휴식할 수 있도록 설계되었습니다.\n\n### 구조적 특성 (Structural Features)\n\n- **캔틸레버 서스펜션**: 탄성 계수가 정밀 계산된 스틸 인장 스프링과 6061 튜브 프레임이 사용자의 체중에 맞춰 유연하게 반응합니다.\n- **파라코드 인터레이싱**: 밀리터리 규격 나일론 파라코드를 핸드 우븐 방식으로 직조하여 통기성과 균등한 체압 분산을 실현했습니다.\n- **비정형 폴리우레탄 폼**: 접촉면의 경도를 3단계로 차등화하여 장시간 누워 있어도 피로감을 주지 않습니다."
     },
     {
@@ -53,7 +53,7 @@
       "materials": "Anodized Aluminum, Electronics",
       "dimensions": "Various Dimensions",
       "externalUrl": "https://leehyejun.com/work/modular-adapter",
-      "order": 3,
+      "order": 4,
       "content": "## 개요 (Overview)\n\n모듈러 어댑터 시스템은 다양한 규격의 디바이스와 카메라 리그, 외장 배터리팩, 센서 유닛을 상호 호환시키는 퀵 체인지 플랫폼입니다. Arca-Swiss 규격 및 NATO 레일 표준과 100% 기계적 호환을 제공합니다.\n\n### 기계적 메커니즘 (Mechanical Integrity)\n\n극한의 진동 환경에서도 완벽한 잠금을 보장하기 위해 듀얼 스테이지 세이프티 핀을 내장했습니다. 손가락 한 번의 가벼운 슬라이드 동작으로 부품을 교체할 수 있으면서도, 불시의 이탈 사고를 원천 차단합니다.\n\n- **기계적 허용 오차**: ±0.01mm 초정밀 공차 가공\n- **접촉면 보호**: 고밀도 폼 실리콘 패딩 적용으로 장비 체결면 스크래치 방지\n- **마감 옵션**: Deep Matte Graphite Black PVD 코팅"
     },
     {
@@ -68,7 +68,7 @@
       "materials": "Polycarbonate, Sandcast Aluminum, Custom Rotary Encoders",
       "dimensions": "165 × 92 × 24 mm",
       "externalUrl": "https://leehyejun.com/work/tactile-interface",
-      "order": 4,
+      "order": 5,
       "content": "## 개요 (Overview)\n\n디지털 화면만을 터치하는 현대 제어 인터페이스의 물리적 한계를 극복하기 위해 제작된 필드 컨트롤러입니다. 장갑을 낀 상태나 시각적 주의가 다른 곳으로 분산된 가혹한 작업 환경에서도 즉각적인 촉각 피드백(Tactile Click)과 미세 회전 토크를 제공합니다.\n\n### 인터랙션 설계 (Interaction Architecture)\n\n- **스텝 휠 인코더**: 24-스텝 마그네틱 멈춤 래칫 메커니즘\n- **저전력 모노크롬 OLED**: 직사광선 아래에서도 100% 식별 가능한 고대비 디스플레이\n- **인체공학적 그립**: 손의 곡면 압력 분포를 분석하여 최적화된 비대칭 외형 구조"
     }
   ],

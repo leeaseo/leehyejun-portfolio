@@ -252,13 +252,26 @@ export function getCustomProjects(): WorkProject[] {
   return [];
 }
 
-export function saveCustomProject(project: WorkProject): void {
+export function saveCustomProject(project: WorkProject, originalSlug?: string): void {
   const existing = getCustomProjects();
-  // Filter out matching project by slug or identical title
-  const updated = existing.filter(
-    (p) => p.slug !== project.slug && (p.title || '').trim().toLowerCase() !== (project.title || '').trim().toLowerCase()
-  );
-  updated.push(project);
+  const targetSlug = originalSlug || project.slug;
+
+  let replaced = false;
+  // Replace in place: matching by originalSlug, slug, or exact order slot
+  const updated = existing.map((p) => {
+    if (p.slug === targetSlug || p.slug === project.slug || p.order === project.order) {
+      replaced = true;
+      return project;
+    }
+    return p;
+  });
+
+  if (!replaced) {
+    updated.push(project);
+  }
+
+  // Always keep projects strictly sorted by the explicit order number
+  updated.sort((a, b) => (a.order || 99) - (b.order || 99));
 
   // 1. Update in-memory cache immediately
   memoryCustomProjects = updated;
@@ -318,7 +331,7 @@ export function getAllProjects(): WorkProject[] {
     });
   }
 
-  // Merge custom owner-published projects (matches either by slug OR by title)
+  // Merge custom owner-published projects (matches either by slug, order slot, or title)
   const custom = getCustomProjects();
   if (Array.isArray(custom)) {
     for (const cp of custom) {
@@ -327,6 +340,7 @@ export function getAllProjects(): WorkProject[] {
         (p) =>
           p &&
           (p.slug === cp.slug ||
+            p.order === cp.order ||
             (p.title && cp.title && p.title.trim().toLowerCase() === cp.title.trim().toLowerCase()))
       );
       if (existingIdx !== -1) {

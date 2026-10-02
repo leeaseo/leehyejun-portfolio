@@ -132,14 +132,20 @@ export default function App() {
   };
 
   const handleProjectAdded = (newProject: WorkProject) => {
-    // Immediately update live project state in memory
+    // Immediately update live project state in place, preserving order stability
     setProjectsList((prev) => {
-      const filtered = prev.filter(
-        (p) =>
-          p.slug !== newProject.slug &&
-          (p.title || '').trim().toLowerCase() !== (newProject.title || '').trim().toLowerCase()
-      );
-      return [newProject, ...filtered].sort((a, b) => (a.order || 99) - (b.order || 99));
+      let replaced = false;
+      const updated = prev.map((p) => {
+        if (p.slug === newProject.slug || p.order === newProject.order) {
+          replaced = true;
+          return newProject;
+        }
+        return p;
+      });
+      if (!replaced) {
+        updated.push(newProject);
+      }
+      return updated.sort((a, b) => (a.order || 99) - (b.order || 99));
     });
     setActiveProjectSlug(newProject.slug);
     setMobileTab('more');
