@@ -7,15 +7,17 @@ interface VisualFrameProps {
   aspectRatio?: '1:1' | '16:9' | '4:3' | '3:4' | 'auto';
   subtitle?: string;
   className?: string;
+  objectFit?: 'contain' | 'cover';
 }
 
 export const VisualFrame: React.FC<VisualFrameProps> = ({
   src,
   alt,
   type = 'product',
-  aspectRatio = '3:4',
+  aspectRatio = 'auto',
   subtitle,
   className = '',
+  objectFit = 'contain',
 }) => {
   const aspectClass =
     aspectRatio === '1:1'
@@ -168,20 +170,47 @@ export const VisualFrame: React.FC<VisualFrameProps> = ({
     );
   };
 
-  return (
-    <div className={`relative w-full overflow-hidden bg-[#F5F5F3] ${aspectClass} ${className}`}>
-      {renderArchitecturalFallback()}
-      {src ? (
+  const [hasError, setHasError] = React.useState(false);
+
+  // When src changes, reset error
+  React.useEffect(() => {
+    setHasError(false);
+  }, [src]);
+
+  // If no src or failed to load
+  if (!src || hasError) {
+    return (
+      <div className={`relative w-full overflow-hidden bg-[#F5F5F3] ${aspectClass} ${className}`}>
+        {renderArchitecturalFallback()}
+      </div>
+    );
+  }
+
+  // Natural aspect ratio for detail gallery photos
+  if (aspectRatio === 'auto') {
+    return (
+      <div className={`relative w-full overflow-hidden bg-[#FAF9F6] ${className}`}>
         <img
           src={src}
           alt={alt}
-          onError={(e) => {
-            e.currentTarget.style.display = 'none';
-          }}
-          className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+          onError={() => setHasError(true)}
+          className="w-full h-auto block object-contain transition-transform duration-300 group-hover:scale-[1.005]"
           referrerPolicy="no-referrer"
+          loading="lazy"
         />
-      ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative w-full overflow-hidden bg-[#F5F5F3] ${aspectClass} ${className}`}>
+      <img
+        src={src}
+        alt={alt}
+        onError={() => setHasError(true)}
+        className={`absolute inset-0 w-full h-full ${objectFit === 'cover' ? 'object-cover' : 'object-contain'} transition-transform duration-300 group-hover:scale-[1.01]`}
+        referrerPolicy="no-referrer"
+      />
     </div>
   );
 };

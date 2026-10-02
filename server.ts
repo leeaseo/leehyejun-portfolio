@@ -11,9 +11,9 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  // Support up to 50MB payload for image base64 uploads
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  // Support up to 100MB payload for uncompressed original high-resolution image uploads
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
   const DATA_FILE = path.resolve(__dirname, 'src/content/custom-data.json');
 

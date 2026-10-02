@@ -1,16 +1,17 @@
 /**
- * Compress and downscale images before storing in localStorage
- * Avoids browser QuotaExceededError while preserving crisp visual quality
+ * Full-fidelity image loader and processor
+ * Preserves 100% original camera resolution and visual sharpness
  */
-export async function compressImageFile(
+
+export async function readOriginalImageFile(
   file: File,
-  maxWidth = 1280,
-  maxHeight = 1280,
-  quality = 0.82
+  _maxWidth?: number,
+  _maxHeight?: number,
+  _quality?: number
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    // If it's already an SVG, read as text/dataURL directly
-    if (file.type === 'image/svg+xml') {
+    // If file is within reasonable web upload size (< 20MB), read 100% original bytes
+    if (file.size <= 20 * 1024 * 1024) {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = reject;
@@ -18,20 +19,22 @@ export async function compressImageFile(
       return;
     }
 
+    // Only if file is excessively large (> 20MB raw file), downscale gracefully to 4K ultra-sharp resolution
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
+        const maxDim = 3840; // 4K Ultra HD
         let width = img.width;
         let height = img.height;
 
-        if (width > maxWidth || height > maxHeight) {
-          if (width / height > maxWidth / maxHeight) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
           } else {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
           }
         }
 
@@ -44,13 +47,12 @@ export async function compressImageFile(
           return;
         }
 
-        // Clean white background for transparency in JPEG
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, width, height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
-        resolve(dataUrl);
+        // Keep 98% quality for pristine detail
+        resolve(canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.98));
       };
       img.onerror = () => resolve(e.target?.result as string);
       img.src = e.target?.result as string;
@@ -59,3 +61,6 @@ export async function compressImageFile(
     reader.readAsDataURL(file);
   });
 }
+
+// Backward-compatible alias for existing imports
+export const compressImageFile = readOriginalImageFile;

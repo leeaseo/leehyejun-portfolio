@@ -103,46 +103,19 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
           <div className="space-y-5">
             {detailImages.length > 0 ? (
               detailImages.map((imgSrc, idx) => (
-                <div key={idx} className="border border-[rgba(0,0,0,0.08)] overflow-hidden bg-[#F6F6F4]">
+                <div key={idx} className="border border-[rgba(0,0,0,0.08)] overflow-hidden bg-white">
                   <VisualFrame
                     src={imgSrc}
                     alt={`${activeProject.title} Detail ${idx + 1}`}
-                    aspectRatio="16:9"
+                    aspectRatio="auto"
                     subtitle={`DETAIL PHOTO ${String(idx + 1).padStart(2, '0')}`}
                   />
                 </div>
               ))
             ) : (
-              <>
-                {/* Fallback default photo plates if no detail images uploaded */}
-                <div className="border border-[rgba(0,0,0,0.08)] overflow-hidden bg-[#F6F6F4]">
-                  <div className="w-full aspect-[16/10] flex flex-col items-center justify-center p-6 text-[#222]">
-                    <svg className="w-4/5 h-4/5 max-h-[360px]" viewBox="0 0 320 200" fill="none" stroke="currentColor" strokeWidth="1.2">
-                      <polygon points="40,80 280,80 250,55 70,55" fill="rgba(240,240,240,0.7)" stroke="currentColor" strokeWidth="1.4" />
-                      <line x1="40" y1="80" x2="280" y2="80" stroke="currentColor" strokeWidth="1.6" />
-                      <line x1="60" y1="80" x2="55" y2="185" stroke="currentColor" strokeWidth="1.8" />
-                      <circle cx="55" cy="187" r="3" fill="#333" />
-                      <line x1="85" y1="58" x2="80" y2="155" stroke="currentColor" strokeWidth="1.4" strokeDasharray="3 3" />
-                      <line x1="260" y1="80" x2="265" y2="185" stroke="currentColor" strokeWidth="1.8" />
-                      <circle cx="265" cy="187" r="3" fill="#333" />
-                      <line x1="235" y1="58" x2="240" y2="155" stroke="currentColor" strokeWidth="1.4" strokeDasharray="3 3" />
-                      <line x1="60" y1="120" x2="75" y2="150" stroke="currentColor" strokeWidth="1.2" />
-                      <line x1="75" y1="150" x2="55" y2="180" stroke="currentColor" strokeWidth="1" />
-                      <line x1="260" y1="120" x2="245" y2="150" stroke="currentColor" strokeWidth="1.2" />
-                      <line x1="245" y1="150" x2="265" y2="180" stroke="currentColor" strokeWidth="1" />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className="border border-[rgba(0,0,0,0.08)] overflow-hidden">
-                  <VisualFrame
-                    src={activeProject.thumbnail}
-                    alt={activeProject.title}
-                    aspectRatio="16:9"
-                    subtitle="PLATE 02 / ELEVATION"
-                  />
-                </div>
-              </>
+              <div className="text-[12px] text-[rgba(0,0,0,0.4)] py-3 font-normal">
+                등록된 세부 사진이 없습니다.
+              </div>
             )}
           </div>
         </div>

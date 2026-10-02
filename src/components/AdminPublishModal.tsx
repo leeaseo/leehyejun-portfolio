@@ -251,7 +251,11 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setExternalUrl(proj.externalUrl || '');
     setContent(proj.content);
     setThumbnail(proj.thumbnail || '');
-    setDetailImages(proj.images || []);
+    // Filter out dummy template images automatically
+    const cleanImages = (proj.images || []).filter(
+      (img) => img && !img.includes('display-system-1.jpg') && !img.includes('display-system-2.jpg')
+    );
+    setDetailImages(cleanImages);
     setWorkTab('editor');
   };
 
@@ -323,7 +327,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
       return;
     }
 
-    const finalSlug = slug.trim() || editingSlug || `project-${Date.now()}`;
+    const finalSlug = editingSlug || slug.trim() || `project-${Date.now()}`;
 
     const projectData: WorkProject = {
       title,
@@ -339,6 +343,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     };
 
     saveCustomProject(projectData);
+    setProjectsList(getAllProjects());
     onProjectAdded(projectData);
     setIsSaved(true);
 

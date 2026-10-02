@@ -2,6 +2,19 @@ import aboutJson from '../content/about.json';
 import resumeJson from '../content/resume.json';
 import customDataJson from '../content/custom-data.json';
 import { AboutData, ResumeData, WorkProject, PostItem, PostAttachment } from './types';
+import { idbGet, idbSet } from './idbStorage';
+
+// In-memory cache for full-fidelity projects (bypasses 5MB localStorage quota)
+let memoryCustomProjects: WorkProject[] | null = null;
+
+// Initialize from IndexedDB asynchronously on browser startup
+if (typeof window !== 'undefined') {
+  idbGet<WorkProject[]>('leehyejun_custom_projects').then((saved) => {
+    if (Array.isArray(saved) && saved.length > 0) {
+      memoryCustomProjects = saved;
+    }
+  }).catch(() => {});
+}
 
 // Load MDX raw strings at build/bundle time via Vite eager glob
 const workModules = import.meta.glob('../content/work/*.mdx', {
@@ -215,39 +228,71 @@ export function saveResumeData(data: ResumeData): void {
 }
 
 export function getCustomProjects(): WorkProject[] {
+  // 1. Check in-memory cache first (preserves original high-res photos)
+  if (memoryCustomProjects && memoryCustomProjects.length > 0) {
+    return memoryCustomProjects;
+  }
+
+  // 2. Check localStorage
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_projects') : null;
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        memoryCustomProjects = parsed;
+        return parsed;
+      }
     }
-    if ((customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects)) {
-      return (customDataJson as any).projects;
-    }
-    return [];
-  } catch {
-    return [];
+  } catch {}
+
+  // 3. Fallback to bundled custom-data.json
+  if ((customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects)) {
+    return (customDataJson as any).projects;
   }
+  return [];
 }
 
 export function saveCustomProject(project: WorkProject): void {
   const existing = getCustomProjects();
-  const updated = existing.filter((p) => p.slug !== project.slug);
+  // Filter out matching project by slug or identical title
+  const updated = existing.filter(
+    (p) => p.slug !== project.slug && (p.title || '').trim().toLowerCase() !== (project.title || '').trim().toLowerCase()
+  );
   updated.push(project);
+
+  // 1. Update in-memory cache immediately
+  memoryCustomProjects = updated;
+
+  // 2. Asynchronously save to IndexedDB (unlimited storage, no 5MB quota errors!)
+  if (typeof window !== 'undefined') {
+    idbSet('leehyejun_custom_projects', updated).catch(() => {});
+  }
+
+  // 3. Attempt to save to localStorage safely
   try {
     localStorage.setItem('leehyejun_custom_projects', JSON.stringify(updated));
   } catch (err) {
-    console.error('Failed to save projects to localStorage:', err);
+    console.warn('[Storage] LocalStorage quota reached, project preserved in IndexedDB & Memory:', err);
   }
-  syncToServer({ projects: getAllProjects() });
+
+  // 4. Sync full dataset to server
+  const allMerged = getAllProjects();
+  syncToServer({ projects: allMerged });
 }
 
 export function deleteCustomProject(slug: string): void {
   const existing = getCustomProjects();
   const updated = existing.filter((p) => p.slug !== slug);
+  memoryCustomProjects = updated;
+
+  if (typeof window !== 'undefined') {
+    idbSet('leehyejun_custom_projects', updated).catch(() => {});
+  }
+
   try {
     localStorage.setItem('leehyejun_custom_projects', JSON.stringify(updated));
   } catch (err) {
-    console.error('Failed to update projects:', err);
+    console.warn('LocalStorage error:', err);
   }
   syncToServer({ projects: getAllProjects() });
 }
@@ -273,12 +318,17 @@ export function getAllProjects(): WorkProject[] {
     });
   }
 
-  // Merge custom owner-published projects
+  // Merge custom owner-published projects (matches either by slug OR by title)
   const custom = getCustomProjects();
   if (Array.isArray(custom)) {
     for (const cp of custom) {
       if (!cp || !cp.slug) continue;
-      const existingIdx = projects.findIndex((p) => p && p.slug === cp.slug);
+      const existingIdx = projects.findIndex(
+        (p) =>
+          p &&
+          (p.slug === cp.slug ||
+            (p.title && cp.title && p.title.trim().toLowerCase() === cp.title.trim().toLowerCase()))
+      );
       if (existingIdx !== -1) {
         projects[existingIdx] = cp;
       } else {

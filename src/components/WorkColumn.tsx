@@ -86,16 +86,16 @@ export const WorkColumn: React.FC<WorkColumnProps> = ({
                 isActive ? 'bg-[#FCFCFB]' : 'bg-white'
               }`}
             >
-              {/* Main Product Image Container (Large framing as seen in capture image) */}
+              {/* Main Product Image Container (Natural aspect ratio: 100% uncropped) */}
               <div
                 onClick={() => onSelectProject(project.slug)}
-                className="cursor-pointer mb-5 overflow-hidden flex items-center justify-center border border-[rgba(0,0,0,0.06)] hover:border-[rgba(0,0,0,0.2)] transition-colors"
+                className="cursor-pointer mb-5 overflow-hidden flex items-center justify-center border border-[rgba(0,0,0,0.06)] hover:border-[rgba(0,0,0,0.2)] transition-colors bg-[#FAF9F6]"
               >
                 <div className="w-full">
                   <VisualFrame
                     src={project.thumbnail}
                     alt={project.title}
-                    aspectRatio="3:4"
+                    aspectRatio="auto"
                     subtitle={`${formattedIndex} / ${project.date}`}
                   />
                 </div>

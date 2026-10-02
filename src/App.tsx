@@ -125,8 +125,15 @@ export default function App() {
   };
 
   const handleProjectAdded = (newProject: WorkProject) => {
-    const refreshed = getAllProjects();
-    setProjectsList(refreshed);
+    // Immediately update live project state in memory
+    setProjectsList((prev) => {
+      const filtered = prev.filter(
+        (p) =>
+          p.slug !== newProject.slug &&
+          (p.title || '').trim().toLowerCase() !== (newProject.title || '').trim().toLowerCase()
+      );
+      return [newProject, ...filtered].sort((a, b) => (a.order || 99) - (b.order || 99));
+    });
     setActiveProjectSlug(newProject.slug);
     setMobileTab('more');
     window.location.hash = `#more/${newProject.slug}`;
