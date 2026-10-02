@@ -68,11 +68,23 @@ export default function App() {
       .catch((err) => console.warn('Could not sync with server:', err));
   }, []);
 
+  // Cleanly clear hash without leaving trailing #
+  const clearHash = () => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  };
+
   // Read URL hash on load and handle hash changes
   useEffect(() => {
+    if (typeof window !== 'undefined' && (window.location.hash === '#' || window.location.hash === '#/')) {
+      clearHash();
+    }
+
     const handleHashChange = () => {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
       if (!hash) {
+        clearHash();
         return;
       }
 
@@ -109,7 +121,7 @@ export default function App() {
   const handleClearActiveProject = () => {
     setActiveProjectSlug(null);
     setMobileTab('work');
-    window.location.hash = '';
+    clearHash();
   };
 
   const handleProjectAdded = (newProject: WorkProject) => {
@@ -248,8 +260,8 @@ export default function App() {
           onAuthenticatedChange={setIsAdminAuthenticated}
           onClose={() => {
             setIsAdminOpen(false);
-            if (window.location.hash === '#admin') {
-              window.location.hash = '';
+            if (window.location.hash) {
+              clearHash();
             }
             setProjectsList(getAllProjects());
             setAboutData(getAboutData());
