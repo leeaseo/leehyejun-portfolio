@@ -22,7 +22,7 @@ export const WorkColumn: React.FC<WorkColumnProps> = ({
 
       {/* Projects Feed */}
       <div className="divide-y divide-[rgba(0,0,0,0.15)]">
-        {projects.map((project, index) => {
+        {(projects || []).filter(Boolean).map((project, index) => {
           const formattedIndex = String(project.order || index + 1).padStart(2, '0');
           const isActive = activeSlug === project.slug;
 

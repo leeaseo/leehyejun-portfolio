@@ -73,7 +73,7 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                   <div className="text-[13px] font-normal text-black">
                     교육
                   </div>
-                  {resumeData.education.map((edu, idx) => (
+                  {(resumeData?.education || []).map((edu, idx) => (
                     <div key={idx} className="flex justify-between items-baseline text-[13px] gap-2">
                       <span className="text-black font-normal">
                         {edu.school} {edu.major}
@@ -86,19 +86,19 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                 </div>
 
                 {/* 2. 경험 */}
-                {resumeData.honors && resumeData.honors.length > 0 && (
+                {Array.isArray(resumeData.honors) && resumeData.honors.length > 0 && (
                   <div className="space-y-2 pb-4 border-b border-[rgba(0,0,0,0.1)]">
                     <div className="text-[13px] font-normal text-black">
                       경험
                     </div>
                     <div className="space-y-1.5">
-                      {resumeData.honors.map((honor, idx) => (
+                      {(resumeData.honors || []).map((honor, idx) => (
                         <div key={idx} className="flex justify-between items-start text-[13px] leading-snug gap-2">
                           <span className="text-black font-normal pr-1">
-                            {honor.title}
+                            {honor?.title}
                           </span>
                           <span className="text-[13px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
-                            ({honor.period})
+                            ({honor?.period})
                           </span>
                         </div>
                       ))}
@@ -112,11 +112,11 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                     자격 및 능력
                   </div>
                   <div className="space-y-1 text-[13px] text-black leading-relaxed">
-                    {resumeData.certifications && resumeData.certifications.length > 0 && (
+                    {Array.isArray(resumeData.certifications) && resumeData.certifications.length > 0 && (
                       <div>{resumeData.certifications.join(', ')}</div>
                     )}
                     <div className="text-black">
-                      {resumeData.skills.join(', ')}
+                      {(Array.isArray(resumeData?.skills) ? resumeData.skills : []).join(', ')}
                     </div>
                   </div>
                 </div>
@@ -127,20 +127,20 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                     경력
                   </div>
                   <div className="space-y-5">
-                    {resumeData.experience.map((exp, idx) => (
+                    {(Array.isArray(resumeData?.experience) ? resumeData.experience : []).map((exp, idx) => (
                       <div key={idx} className="space-y-1.5 text-[13px]">
                         {/* Company, Role, Period (좌측 탭 여유 확보로 줄바꿈 방지) */}
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
                           <span className="font-normal text-black">
-                            {exp.company} · {exp.role}
+                            {exp?.company} · {exp?.role}
                           </span>
                           <span className="text-[12.5px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
-                            {exp.period}
+                            {exp?.period}
                           </span>
                         </div>
 
                         {/* Task bullets */}
-                        {exp.tasks && exp.tasks.length > 0 && (
+                        {Array.isArray(exp?.tasks) && exp.tasks.length > 0 && (
                           <ul className="pl-4 space-y-1 text-[13px] text-[rgba(0,0,0,0.75)] list-disc">
                             {exp.tasks.map((task, tIdx) => (
                               <li key={tIdx} className="leading-relaxed">

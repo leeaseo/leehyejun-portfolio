@@ -8,11 +8,18 @@ import {
   getResumeData,
   getAllProjects,
   getProjectBySlug,
+  saveAboutData,
+  saveResumeData,
+  saveCustomProject,
+  getCustomProjects,
 } from './lib/content';
 import {
   subscribeToFirestoreProjects,
   subscribeToFirestoreAbout,
   subscribeToFirestoreResume,
+  saveAboutToCloud,
+  saveResumeToCloud,
+  saveProjectToCloud,
 } from './lib/firebase';
 import { WorkProject, AboutData, ResumeData } from './lib/types';
 import { Plus } from 'lucide-react';
@@ -38,12 +45,50 @@ export default function App() {
     setResumeData(getResumeData());
   }, []);
 
-  // Realtime Cloud Sync via Firebase Firestore
+  // Auto-upload PC local edits to Firestore on load so Mobile immediately gets them!
+  useEffect(() => {
+    try {
+      const localAboutRaw = localStorage.getItem('leehyejun_custom_about');
+      if (localAboutRaw) {
+        saveAboutToCloud(getAboutData()).catch((e) => console.warn('Auto-sync about error:', e));
+      }
+
+      const localResumeRaw = localStorage.getItem('leehyejun_custom_resume');
+      if (localResumeRaw) {
+        saveResumeToCloud(getResumeData()).catch((e) => console.warn('Auto-sync resume error:', e));
+      }
+
+      const localProjects = getCustomProjects();
+      if (Array.isArray(localProjects) && localProjects.length > 0) {
+        localProjects.forEach((proj) => {
+          if (proj && proj.slug) {
+            saveProjectToCloud(proj).catch((e) => console.warn('Auto-sync project error:', e));
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Auto-sync error:', err);
+    }
+  }, []);
+
+  // Realtime Cloud Sync via Firebase Firestore (PC & Mobile stay 100% in sync)
   useEffect(() => {
     // 1. Projects subscription
     const unsubscribeProjects = subscribeToFirestoreProjects((cloudProjects) => {
-      if (cloudProjects && cloudProjects.length > 0) {
-        setProjectsList(cloudProjects);
+      if (Array.isArray(cloudProjects) && cloudProjects.length > 0) {
+        const base = getAllProjects();
+        const map = new Map<string, WorkProject>();
+        base.forEach((p) => {
+          if (p && p.slug) map.set(p.slug, p);
+        });
+        cloudProjects.forEach((cp) => {
+          if (cp && cp.slug) {
+            map.set(cp.slug, cp);
+            saveCustomProject(cp); // Cache locally on Mobile too
+          }
+        });
+        const merged = Array.from(map.values()).sort((a, b) => (a.order || 99) - (b.order || 99));
+        setProjectsList(merged);
       }
     });
 
@@ -51,6 +96,7 @@ export default function App() {
     const unsubscribeAbout = subscribeToFirestoreAbout((cloudAbout) => {
       if (cloudAbout) {
         setAboutData(cloudAbout);
+        saveAboutData(cloudAbout); // Cache locally on Mobile too
       }
     });
 
@@ -58,6 +104,7 @@ export default function App() {
     const unsubscribeResume = subscribeToFirestoreResume((cloudResume) => {
       if (cloudResume) {
         setResumeData(cloudResume);
+        saveResumeData(cloudResume); // Cache locally on Mobile too
       }
     });
 

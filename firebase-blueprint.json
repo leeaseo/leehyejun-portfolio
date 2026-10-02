@@ -1,7 +1,7 @@
 {
   "entities": {
-    "project": {
-      "title": "Project",
+    "WorkProject": {
+      "title": "WorkProject",
       "description": "Portfolio work project item",
       "type": "object",
       "properties": {
@@ -9,6 +9,7 @@
         "slug": { "type": "string" },
         "date": { "type": "string" },
         "thumbnail": { "type": "string" },
+        "images": { "type": "array" },
         "materials": { "type": "string" },
         "dimensions": { "type": "string" },
         "externalUrl": { "type": "string" },
@@ -17,25 +18,42 @@
       },
       "required": ["title", "slug"]
     },
-    "siteContent": {
-      "title": "SiteContent",
-      "description": "Site wide content like About and Resume information",
+    "AboutContent": {
+      "title": "AboutContent",
+      "description": "About section profile data",
       "type": "object",
       "properties": {
-        "type": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "location": { "type": "string" },
+        "bio": { "type": "string" },
+        "profileImage": { "type": "string" },
+        "contact": { "type": "object" }
       },
-      "required": ["type"]
+      "required": ["name", "role"]
+    },
+    "ResumeContent": {
+      "title": "ResumeContent",
+      "description": "Resume section experience and education data",
+      "type": "object",
+      "properties": {
+        "education": { "type": "array" },
+        "experience": { "type": "array" },
+        "skills": { "type": "array" },
+        "honors": { "type": "array" },
+        "certifications": { "type": "array" },
+        "resumePdf": { "type": "string" }
+      }
     }
   },
   "firestore": {
     "/projects/{projectId}": {
-      "schema": "project",
-      "description": "Public portfolio projects displayed on Work and More columns"
+      "schema": "WorkProject",
+      "description": "Collection of published portfolio projects"
     },
     "/site_content/{contentId}": {
-      "schema": "siteContent",
-      "description": "About and Resume site settings and information"
+      "schema": "AboutContent",
+      "description": "General site content including about and resume documents"
     }
   }
 }

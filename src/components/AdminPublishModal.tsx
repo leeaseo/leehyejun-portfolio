@@ -31,7 +31,6 @@ import {
   FileText,
   Briefcase,
   Loader2,
-  Cloud,
   CloudUpload,
 } from 'lucide-react';
 
@@ -257,7 +256,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const handleSyncAllToCloud = async () => {
     try {
       setIsSyncingCloud(true);
-      setSyncStatusMsg('클라우드에 업로드 중...');
+      setSyncStatusMsg('클라우드에 동기화 중...');
       
       // 1. Sync about
       await saveAboutToCloud(aboutForm);
@@ -269,13 +268,13 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         await saveProjectToCloud(p);
       }
       
-      setSyncStatusMsg('동기화 성공!');
+      setSyncStatusMsg('동기화 완료!');
       setTimeout(() => setSyncStatusMsg(''), 4000);
-      alert('현재 컴퓨터에서 수정한 모든 데이터(About, Resume, 프로젝트)가 Firebase 클라우드에 성공적으로 업로드되었습니다! 이제 다른 컴퓨터나 링크로 접속해도 즉시 동일하게 보입니다.');
+      alert('현재 데이터(About, Resume, 프로젝트)가 Firebase 클라우드에 성공적으로 동기화되었습니다! 이제 어느 컴퓨터나 모바일에서도 실시간으로 공유됩니다.');
     } catch (err) {
       console.error('Cloud sync error:', err);
       setSyncStatusMsg('동기화 오류');
-      alert('클라우드 동기화 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      alert('클라우드 동기화 중 오류가 발생했습니다. 네트워크 연결을 확인해주세요.');
     } finally {
       setIsSyncingCloud(false);
     }
@@ -484,7 +483,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   </label>
                   <input
                     type="text"
-                    value={aboutForm.role}
+                    value={aboutForm.role || ''}
                     onChange={(e) => setAboutForm({ ...aboutForm, role: e.target.value })}
                     className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
                   />
@@ -495,7 +494,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   </label>
                   <input
                     type="text"
-                    value={aboutForm.location}
+                    value={aboutForm.location || ''}
                     onChange={(e) => setAboutForm({ ...aboutForm, location: e.target.value })}
                     className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
                   />
@@ -509,7 +508,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   </label>
                   <input
                     type="text"
-                    value={aboutForm.name}
+                    value={aboutForm.name || ''}
                     onChange={(e) => setAboutForm({ ...aboutForm, name: e.target.value })}
                     className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
                   />
@@ -520,11 +519,14 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   </label>
                   <input
                     type="text"
-                    value={aboutForm.contact.email}
+                    value={aboutForm.contact?.email || ''}
                     onChange={(e) =>
                       setAboutForm({
                         ...aboutForm,
-                        contact: { ...aboutForm.contact, email: e.target.value },
+                        contact: {
+                          ...(aboutForm.contact || { email: '', instagram: '', linkedin: '', github: '' }),
+                          email: e.target.value,
+                        },
                       })
                     }
                     className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
@@ -538,7 +540,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 </label>
                 <textarea
                   rows={4}
-                  value={aboutForm.bio}
+                  value={aboutForm.bio || ''}
                   onChange={(e) => setAboutForm({ ...aboutForm, bio: e.target.value })}
                   className="w-full border border-[rgba(0,0,0,0.25)] p-3 text-[13px] leading-relaxed focus:outline-none focus:border-black"
                 />
@@ -569,14 +571,14 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase font-mono">
                   1. 교육 (Education)
                 </label>
-                {resumeForm.education.map((edu, idx) => (
+                {(resumeForm.education || []).map((edu, idx) => (
                   <div key={idx} className="grid grid-cols-3 gap-2">
                     <input
                       type="text"
                       placeholder="학교명"
                       value={edu.school}
                       onChange={(e) => {
-                        const copy = [...resumeForm.education];
+                        const copy = resumeForm.education ? [...resumeForm.education] : [];
                         copy[idx].school = e.target.value;
                         setResumeForm({ ...resumeForm, education: copy });
                       }}
@@ -587,7 +589,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                       placeholder="전공"
                       value={edu.major}
                       onChange={(e) => {
-                        const copy = [...resumeForm.education];
+                        const copy = resumeForm.education ? [...resumeForm.education] : [];
                         copy[idx].major = e.target.value;
                         setResumeForm({ ...resumeForm, education: copy });
                       }}
@@ -598,7 +600,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                       placeholder="기간 (예: 2019년 졸업)"
                       value={edu.period}
                       onChange={(e) => {
-                        const copy = [...resumeForm.education];
+                        const copy = resumeForm.education ? [...resumeForm.education] : [];
                         copy[idx].period = e.target.value;
                         setResumeForm({ ...resumeForm, education: copy });
                       }}
@@ -672,7 +674,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 <input
                   type="text"
                   placeholder="보유 스킬 (예: Auto CAD, Adobe softwares, Sketch Up, 3D MAX)"
-                  value={resumeForm.skills.join(', ')}
+                  value={(resumeForm.skills || []).join(', ')}
                   onChange={(e) =>
                     setResumeForm({
                       ...resumeForm,
@@ -692,7 +694,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   <button
                     type="button"
                     onClick={() => {
-                      const copy = [...resumeForm.experience];
+                      const copy = resumeForm.experience ? [...resumeForm.experience] : [];
                       copy.unshift({
                         company: '',
                         role: '',
@@ -707,14 +709,14 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   </button>
                 </div>
 
-                {resumeForm.experience.map((exp, idx) => (
+                {(resumeForm.experience || []).map((exp, idx) => (
                   <div key={idx} className="p-3 border border-[rgba(0,0,0,0.15)] bg-[#FAFAFA] space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="font-medium text-[12px]">경력 #{idx + 1}</span>
                       <button
                         type="button"
                         onClick={() => {
-                          const copy = resumeForm.experience.filter((_, i) => i !== idx);
+                          const copy = (resumeForm.experience || []).filter((_, i) => i !== idx);
                           setResumeForm({ ...resumeForm, experience: copy });
                         }}
                         className="text-[11px] text-red-600 hover:underline"
@@ -729,7 +731,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                         placeholder="회사명"
                         value={exp.company}
                         onChange={(e) => {
-                          const copy = [...resumeForm.experience];
+                          const copy = resumeForm.experience ? [...resumeForm.experience] : [];
                           copy[idx].company = e.target.value;
                           setResumeForm({ ...resumeForm, experience: copy });
                         }}
@@ -740,7 +742,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                         placeholder="직책 / 팀 (디자인팀 · 대리)"
                         value={exp.role}
                         onChange={(e) => {
-                          const copy = [...resumeForm.experience];
+                          const copy = resumeForm.experience ? [...resumeForm.experience] : [];
                           copy[idx].role = e.target.value;
                           setResumeForm({ ...resumeForm, experience: copy });
                         }}
@@ -806,7 +808,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               </div>
 
               <div className="divide-y divide-[rgba(0,0,0,0.1)]">
-                {projectsList.map((p) => (
+                {(projectsList || []).filter((p): p is WorkProject => Boolean(p && p.slug)).map((p) => (
                   <div key={p.slug} className="py-2.5 flex items-center justify-between gap-3 text-[13px]">
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="font-mono text-[11px] text-[rgba(0,0,0,0.4)]">
@@ -1146,10 +1148,10 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 onClick={handleSyncAllToCloud}
                 disabled={isSyncingCloud}
                 className="bg-black text-white px-3 py-1.5 flex items-center gap-1.5 hover:bg-neutral-800 transition-colors cursor-pointer font-normal disabled:opacity-50"
-                title="현재 컴퓨터에서 수정한 모든 내용을 클라우드에 올려 다른 기기 및 공유 링크에 즉시 실시간 반영합니다"
+                title="현재 컴퓨터에서 수정한 모든 내용을 Firebase 클라우드에 올려 다른 기기 및 공유 링크에 즉시 실시간 반영합니다"
               >
                 {isSyncingCloud ? <Loader2 size={12} className="animate-spin" /> : <CloudUpload size={13} />}
-                <span>{syncStatusMsg || '⚡ 현재 컴퓨터 데이터 전체 클라우드(Firebase) 동기화'}</span>
+                <span>{syncStatusMsg || '⚡ Firebase 클라우드 전체 동기화'}</span>
               </button>
             </div>
 

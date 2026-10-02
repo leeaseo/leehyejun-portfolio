@@ -1,157 +1,165 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
 import {
   getFirestore,
-  doc,
-  getDocFromServer,
   collection,
-  onSnapshot,
+  doc,
   setDoc,
   deleteDoc,
-  query,
-  orderBy,
+  onSnapshot,
+  getDocFromServer,
 } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { WorkProject, AboutData, ResumeData } from './types';
+import aboutJson from '../content/about.json';
+import resumeJson from '../content/resume.json';
 
-// Initialize Firebase client
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth();
+export const auth = getAuth(app);
 
-// Test connection as instructed by skill
-export async function testConnection() {
+// Test connection on boot
+(async () => {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('Firebase connection verified successfully.');
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase connection check: client is offline or database initializing.');
+      console.warn('Firebase client is offline, check connection.');
     }
   }
-}
-testConnection();
+})();
 
-// ==========================================
-// 1. Projects Realtime Cloud Sync
-// ==========================================
-export function subscribeToFirestoreProjects(
-  callback: (projects: WorkProject[]) => void
-) {
-  const projectsRef = collection(db, 'projects');
+const PROJECTS_COLLECTION = 'projects';
+const SITE_CONTENT_COLLECTION = 'site_content';
+
+/**
+ * Sanitize and guarantee all fields of AboutData exist
+ */
+export function sanitizeAboutData(data?: Partial<AboutData> | null): AboutData {
+  if (!data || typeof data !== 'object') return aboutJson as AboutData;
+  return {
+    name: data.name || aboutJson.name || 'Lee Hye Jun',
+    role: data.role || aboutJson.role || 'Furniture Designer',
+    location: data.location || aboutJson.location || 'Seoul, Korea',
+    bio: data.bio || aboutJson.bio || '',
+    profileImage: data.profileImage || aboutJson.profileImage || '',
+    contact: {
+      email: data.contact?.email || (data as unknown as { email?: string })?.email || aboutJson.contact?.email || '15682@naver.com',
+      instagram: data.contact?.instagram || aboutJson.contact?.instagram || '',
+      linkedin: data.contact?.linkedin || aboutJson.contact?.linkedin || '',
+      github: data.contact?.github || aboutJson.contact?.github || '',
+    },
+  };
+}
+
+/**
+ * Sanitize and guarantee all fields of ResumeData exist
+ */
+export function sanitizeResumeData(data?: Partial<ResumeData> | null): ResumeData {
+  if (!data || typeof data !== 'object') return resumeJson as ResumeData;
+  return {
+    education: Array.isArray(data.education) ? data.education : (resumeJson.education || []),
+    honors: Array.isArray(data.honors) ? data.honors : (resumeJson.honors || []),
+    skills: Array.isArray(data.skills) ? data.skills : (resumeJson.skills || []),
+    certifications: Array.isArray(data.certifications) ? data.certifications : (resumeJson.certifications || []),
+    experience: Array.isArray(data.experience) ? data.experience : (resumeJson.experience || []),
+    resumePdf: data.resumePdf || resumeJson.resumePdf || '',
+  };
+}
+
+/**
+ * Save single project to Firestore
+ */
+export async function saveProjectToCloud(project: WorkProject): Promise<void> {
+  const docRef = doc(db, PROJECTS_COLLECTION, project.slug);
+  await setDoc(docRef, project, { merge: true });
+}
+
+/**
+ * Delete project from Firestore
+ */
+export async function deleteProjectFromCloud(slug: string): Promise<void> {
+  const docRef = doc(db, PROJECTS_COLLECTION, slug);
+  await deleteDoc(docRef);
+}
+
+/**
+ * Save About info to Firestore
+ */
+export async function saveAboutToCloud(about: AboutData): Promise<void> {
+  const sanitized = sanitizeAboutData(about);
+  const docRef = doc(db, SITE_CONTENT_COLLECTION, 'about');
+  await setDoc(docRef, sanitized, { merge: true });
+}
+
+/**
+ * Save Resume info to Firestore
+ */
+export async function saveResumeToCloud(resume: ResumeData): Promise<void> {
+  const sanitized = sanitizeResumeData(resume);
+  const docRef = doc(db, SITE_CONTENT_COLLECTION, 'resume');
+  await setDoc(docRef, sanitized, { merge: true });
+}
+
+/**
+ * Realtime listener for Projects
+ */
+export function subscribeToFirestoreProjects(callback: (projects: WorkProject[]) => void) {
+  const colRef = collection(db, PROJECTS_COLLECTION);
   return onSnapshot(
-    projectsRef,
+    colRef,
     (snapshot) => {
-      const projects: WorkProject[] = [];
+      const list: WorkProject[] = [];
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as WorkProject;
-        projects.push(data);
+        if (data && data.slug) {
+          list.push(data);
+        }
       });
-      // Sort by order ascending
-      projects.sort((a, b) => (a.order || 0) - (b.order || 0));
-      callback(projects);
+      callback(list);
     },
-    (err) => {
-      console.warn('Firestore projects snapshot listener error:', err);
+    (error) => {
+      console.warn('Firestore projects listener warning:', error);
     }
   );
 }
 
-export async function saveProjectToCloud(project: WorkProject): Promise<void> {
-  try {
-    const docRef = doc(db, 'projects', project.slug);
-    await setDoc(docRef, {
-      ...project,
-      updatedAt: new Date().toISOString(),
-    });
-    console.log(`Project ${project.slug} saved to Firebase Firestore successfully.`);
-  } catch (err) {
-    console.error('Failed to save project to Firestore:', err);
-    throw err;
-  }
-}
-
-export async function deleteProjectFromCloud(slug: string): Promise<void> {
-  try {
-    const docRef = doc(db, 'projects', slug);
-    await deleteDoc(docRef);
-    console.log(`Project ${slug} deleted from Firebase Firestore successfully.`);
-  } catch (err) {
-    console.error('Failed to delete project from Firestore:', err);
-    throw err;
-  }
-}
-
-// ==========================================
-// 2. About Data Cloud Sync
-// ==========================================
-export function subscribeToFirestoreAbout(
-  callback: (about: AboutData | null) => void
-) {
-  const aboutRef = doc(db, 'site_content', 'about');
+/**
+ * Realtime listener for About
+ */
+export function subscribeToFirestoreAbout(callback: (about: AboutData | null) => void) {
+  const docRef = doc(db, SITE_CONTENT_COLLECTION, 'about');
   return onSnapshot(
-    aboutRef,
+    docRef,
     (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data();
-        callback(data.data as AboutData);
+        callback(sanitizeAboutData(docSnap.data() as Partial<AboutData>));
       } else {
         callback(null);
       }
     },
-    (err) => {
-      console.warn('Firestore about listener error:', err);
+    (error) => {
+      console.warn('Firestore about listener warning:', error);
     }
   );
 }
 
-export async function saveAboutToCloud(about: AboutData): Promise<void> {
-  try {
-    const docRef = doc(db, 'site_content', 'about');
-    await setDoc(docRef, {
-      type: 'about',
-      data: about,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error('Failed to save about to Firestore:', err);
-    throw err;
-  }
-}
-
-// ==========================================
-// 3. Resume Data Cloud Sync
-// ==========================================
-export function subscribeToFirestoreResume(
-  callback: (resume: ResumeData | null) => void
-) {
-  const resumeRef = doc(db, 'site_content', 'resume');
+/**
+ * Realtime listener for Resume
+ */
+export function subscribeToFirestoreResume(callback: (resume: ResumeData | null) => void) {
+  const docRef = doc(db, SITE_CONTENT_COLLECTION, 'resume');
   return onSnapshot(
-    resumeRef,
+    docRef,
     (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data();
-        callback(data.data as ResumeData);
+        callback(sanitizeResumeData(docSnap.data() as Partial<ResumeData>));
       } else {
         callback(null);
       }
     },
-    (err) => {
-      console.warn('Firestore resume listener error:', err);
+    (error) => {
+      console.warn('Firestore resume listener warning:', error);
     }
   );
-}
-
-export async function saveResumeToCloud(resume: ResumeData): Promise<void> {
-  try {
-    const docRef = doc(db, 'site_content', 'resume');
-    await setDoc(docRef, {
-      type: 'resume',
-      data: resume,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error('Failed to save resume to Firestore:', err);
-    throw err;
-  }
 }

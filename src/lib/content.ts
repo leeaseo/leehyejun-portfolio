@@ -130,7 +130,24 @@ function parseFrontmatter<T>(rawString: string): ParsedMdx<T> {
 export function getAboutData(): AboutData {
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_about') : null;
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          name: parsed.name || aboutJson.name || 'Lee Hye Jun',
+          role: parsed.role || aboutJson.role || 'Furniture Designer',
+          location: parsed.location || aboutJson.location || 'Seoul, Korea',
+          bio: parsed.bio || aboutJson.bio || '',
+          profileImage: parsed.profileImage || aboutJson.profileImage || '',
+          contact: {
+            email: parsed.contact?.email || parsed.email || aboutJson.contact?.email || '15682@naver.com',
+            instagram: parsed.contact?.instagram || aboutJson.contact?.instagram || '',
+            linkedin: parsed.contact?.linkedin || aboutJson.contact?.linkedin || '',
+            github: parsed.contact?.github || aboutJson.contact?.github || '',
+          },
+        };
+      }
+    }
   } catch {
     // fallback
   }
@@ -148,7 +165,19 @@ export function saveAboutData(data: AboutData): void {
 export function getResumeData(): ResumeData {
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_resume') : null;
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          education: Array.isArray(parsed.education) ? parsed.education : (resumeJson.education || []),
+          honors: Array.isArray(parsed.honors) ? parsed.honors : (resumeJson.honors || []),
+          skills: Array.isArray(parsed.skills) ? parsed.skills : (resumeJson.skills || []),
+          certifications: Array.isArray(parsed.certifications) ? parsed.certifications : (resumeJson.certifications || []),
+          experience: Array.isArray(parsed.experience) ? parsed.experience : (resumeJson.experience || []),
+          resumePdf: parsed.resumePdf || resumeJson.resumePdf || '',
+        };
+      }
+    }
   } catch {
     // fallback
   }
@@ -217,16 +246,21 @@ export function getAllProjects(): WorkProject[] {
 
   // Merge custom owner-published projects
   const custom = getCustomProjects();
-  for (const cp of custom) {
-    const existingIdx = projects.findIndex((p) => p.slug === cp.slug);
-    if (existingIdx !== -1) {
-      projects[existingIdx] = cp;
-    } else {
-      projects.push(cp);
+  if (Array.isArray(custom)) {
+    for (const cp of custom) {
+      if (!cp || !cp.slug) continue;
+      const existingIdx = projects.findIndex((p) => p && p.slug === cp.slug);
+      if (existingIdx !== -1) {
+        projects[existingIdx] = cp;
+      } else {
+        projects.push(cp);
+      }
     }
   }
 
-  return projects.sort((a, b) => a.order - b.order);
+  return projects
+    .filter((p): p is WorkProject => Boolean(p && p.slug))
+    .sort((a, b) => (a.order || 99) - (b.order || 99));
 }
 
 export function getProjectBySlug(slug: string): WorkProject | undefined {
