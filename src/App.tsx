@@ -9,6 +9,11 @@ import {
   getAllProjects,
   getProjectBySlug,
 } from './lib/content';
+import {
+  subscribeToFirestoreProjects,
+  subscribeToFirestoreAbout,
+  subscribeToFirestoreResume,
+} from './lib/firebase';
 import { WorkProject, AboutData, ResumeData } from './lib/types';
 import { Plus } from 'lucide-react';
 
@@ -31,6 +36,36 @@ export default function App() {
     setProjectsList(getAllProjects());
     setAboutData(getAboutData());
     setResumeData(getResumeData());
+  }, []);
+
+  // Realtime Cloud Sync via Firebase Firestore
+  useEffect(() => {
+    // 1. Projects subscription
+    const unsubscribeProjects = subscribeToFirestoreProjects((cloudProjects) => {
+      if (cloudProjects && cloudProjects.length > 0) {
+        setProjectsList(cloudProjects);
+      }
+    });
+
+    // 2. About subscription
+    const unsubscribeAbout = subscribeToFirestoreAbout((cloudAbout) => {
+      if (cloudAbout) {
+        setAboutData(cloudAbout);
+      }
+    });
+
+    // 3. Resume subscription
+    const unsubscribeResume = subscribeToFirestoreResume((cloudResume) => {
+      if (cloudResume) {
+        setResumeData(cloudResume);
+      }
+    });
+
+    return () => {
+      unsubscribeProjects();
+      unsubscribeAbout();
+      unsubscribeResume();
+    };
   }, []);
 
   // Read URL hash on load and handle hash changes
@@ -89,7 +124,9 @@ export default function App() {
     setResumeData(newResume);
   };
 
-  const activeProject = activeProjectSlug ? getProjectBySlug(activeProjectSlug) || null : null;
+  const activeProject = activeProjectSlug
+    ? projectsList.find((p) => p.slug === activeProjectSlug) || getProjectBySlug(activeProjectSlug) || null
+    : null;
 
   return (
     <div className="h-screen w-full bg-white text-black flex flex-col font-sans select-text overflow-hidden">

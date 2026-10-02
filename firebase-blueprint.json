@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "project": {
+      "title": "Project",
+      "description": "Portfolio work project item",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "date": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "materials": { "type": "string" },
+        "dimensions": { "type": "string" },
+        "externalUrl": { "type": "string" },
+        "order": { "type": "number" },
+        "content": { "type": "string" }
+      },
+      "required": ["title", "slug"]
+    },
+    "siteContent": {
+      "title": "SiteContent",
+      "description": "Site wide content like About and Resume information",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["type"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "project",
+      "description": "Public portfolio projects displayed on Work and More columns"
+    },
+    "/site_content/{contentId}": {
+      "schema": "siteContent",
+      "description": "About and Resume site settings and information"
+    }
+  }
+}

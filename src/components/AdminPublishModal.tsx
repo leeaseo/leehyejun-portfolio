@@ -9,6 +9,12 @@ import {
   getResumeData,
   saveResumeData,
 } from '../lib/content';
+import {
+  saveProjectToCloud,
+  deleteProjectFromCloud,
+  saveAboutToCloud,
+  saveResumeToCloud,
+} from '../lib/firebase';
 import { compressImageFile } from '../lib/imageCompressor';
 import {
   X,
@@ -25,6 +31,8 @@ import {
   FileText,
   Briefcase,
   Loader2,
+  Cloud,
+  CloudUpload,
 } from 'lucide-react';
 
 interface AdminPublishModalProps {
@@ -80,6 +88,56 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
 
   const thumbnailFileInputRef = useRef<HTMLInputElement>(null);
   const detailFileInputRef = useRef<HTMLInputElement>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportData = () => {
+    const data = {
+      about: getAboutData(),
+      resume: getResumeData(),
+      projects: getAllProjects(),
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `leehyejun-portfolio-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const parsed = JSON.parse(event.target?.result as string);
+          if (parsed.about) {
+            saveAboutData(parsed.about);
+            onAboutUpdated(parsed.about);
+            setAboutForm(parsed.about);
+          }
+          if (parsed.resume) {
+            saveResumeData(parsed.resume);
+            onResumeUpdated(parsed.resume);
+            setResumeForm(parsed.resume);
+          }
+          if (parsed.projects && Array.isArray(parsed.projects)) {
+            parsed.projects.forEach((proj: WorkProject) => saveCustomProject(proj));
+            setProjectsList(getAllProjects());
+            if (parsed.projects[0]) {
+              onProjectAdded(parsed.projects[0]);
+            }
+          }
+          alert('데이터를 성공적으로 불러왔습니다! 이제 이 기기에서도 동일하게 표시됩니다.');
+        } catch {
+          alert('올바르지 않은 백업 파일 형식입니다.');
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -193,9 +251,40 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setWorkTab('editor');
   };
 
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState('');
+
+  const handleSyncAllToCloud = async () => {
+    try {
+      setIsSyncingCloud(true);
+      setSyncStatusMsg('클라우드에 업로드 중...');
+      
+      // 1. Sync about
+      await saveAboutToCloud(aboutForm);
+      // 2. Sync resume
+      await saveResumeToCloud(resumeForm);
+      // 3. Sync all projects
+      const currentProjects = getAllProjects();
+      for (const p of currentProjects) {
+        await saveProjectToCloud(p);
+      }
+      
+      setSyncStatusMsg('동기화 성공!');
+      setTimeout(() => setSyncStatusMsg(''), 4000);
+      alert('현재 컴퓨터에서 수정한 모든 데이터(About, Resume, 프로젝트)가 Firebase 클라우드에 성공적으로 업로드되었습니다! 이제 다른 컴퓨터나 링크로 접속해도 즉시 동일하게 보입니다.');
+    } catch (err) {
+      console.error('Cloud sync error:', err);
+      setSyncStatusMsg('동기화 오류');
+      alert('클라우드 동기화 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
   const handleDeleteProject = (slugToDelete: string) => {
     if (confirm('정말 이 프로젝트를 삭제하시겠습니까?')) {
       deleteCustomProject(slugToDelete);
+      deleteProjectFromCloud(slugToDelete).catch((err) => console.warn('Cloud delete error:', err));
       const updated = getAllProjects();
       setProjectsList(updated);
       if (editingSlug === slugToDelete) {
@@ -262,6 +351,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     };
 
     saveCustomProject(projectData);
+    saveProjectToCloud(projectData).catch((err) => console.warn('Cloud project save error:', err));
     onProjectAdded(projectData);
     setIsSaved(true);
 
@@ -275,6 +365,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
   const handleSaveAbout = (e: React.FormEvent) => {
     e.preventDefault();
     saveAboutData(aboutForm);
+    saveAboutToCloud(aboutForm).catch((err) => console.warn('Cloud about save error:', err));
     onAboutUpdated(aboutForm);
     setIsSaved(true);
     setTimeout(() => {
@@ -287,6 +378,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
   const handleSaveResume = (e: React.FormEvent) => {
     e.preventDefault();
     saveResumeData(resumeForm);
+    saveResumeToCloud(resumeForm).catch((err) => console.warn('Cloud resume save error:', err));
     onResumeUpdated(resumeForm);
     setIsSaved(true);
     setTimeout(() => {
@@ -1044,6 +1136,49 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
             </form>
           )}
         </div>
+
+        {/* Discreet Data Sync & Transfer Bar (내보내기 / 불러오기 & Firebase 클라우드 동기화) */}
+        {isAuthenticated && (
+          <div className="px-5 py-3 bg-neutral-50 border-t border-[rgba(0,0,0,0.1)] flex flex-col sm:flex-row items-center justify-between gap-2.5 text-[11.5px] text-[rgba(0,0,0,0.6)]">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSyncAllToCloud}
+                disabled={isSyncingCloud}
+                className="bg-black text-white px-3 py-1.5 flex items-center gap-1.5 hover:bg-neutral-800 transition-colors cursor-pointer font-normal disabled:opacity-50"
+                title="현재 컴퓨터에서 수정한 모든 내용을 클라우드에 올려 다른 기기 및 공유 링크에 즉시 실시간 반영합니다"
+              >
+                {isSyncingCloud ? <Loader2 size={12} className="animate-spin" /> : <CloudUpload size={13} />}
+                <span>{syncStatusMsg || '⚡ 현재 컴퓨터 데이터 전체 클라우드(Firebase) 동기화'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 text-[11px]">
+              <input
+                type="file"
+                accept=".json"
+                ref={importFileInputRef}
+                onChange={handleImportData}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => importFileInputRef.current?.click()}
+                className="underline hover:text-black cursor-pointer"
+              >
+                [백업파일 불러오기]
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={handleExportData}
+                className="underline hover:text-black cursor-pointer"
+              >
+                [JSON 백업 내보내기]
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
