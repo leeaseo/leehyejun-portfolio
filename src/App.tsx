@@ -196,20 +196,20 @@ export default function App() {
         </nav>
       </header>
 
-      {/* Main 3-Column Grid Container */}
-      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-12 min-h-0 lg:overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[rgba(0,0,0,0.15)]">
-        {/* Column 1: About & Resume (Left - 3 cols) */}
+      {/* Main 3-Column Grid Container (1:1:1 exact ratio on desktop) */}
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-3 min-h-0 lg:overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[rgba(0,0,0,0.15)]">
+        {/* Column 1: About & Resume (Left - 1/3) */}
         <section
-          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto lg:col-span-3 ${
+          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
             mobileTab === 'about' ? 'block' : 'hidden lg:block'
           }`}
         >
           <AboutResumeColumn aboutData={aboutData} resumeData={resumeData} />
         </section>
 
-        {/* Column 2: Work (Middle - 5 cols) */}
+        {/* Column 2: Work (Middle - 1/3) */}
         <section
-          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto lg:col-span-5 ${
+          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
             mobileTab === 'work' ? 'block' : 'hidden lg:block'
           }`}
         >
@@ -220,9 +220,9 @@ export default function App() {
           />
         </section>
 
-        {/* Column 3: More (Right - 4 cols) */}
+        {/* Column 3: More (Right - 1/3) */}
         <section
-          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto lg:col-span-4 ${
+          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
             mobileTab === 'more' ? 'block' : 'hidden lg:block'
           }`}
         >

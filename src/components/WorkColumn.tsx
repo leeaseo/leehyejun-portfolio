@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { WorkProject } from '../lib/types';
 import { VisualFrame } from './VisualFrame';
 
@@ -13,12 +13,64 @@ export const WorkColumn: React.FC<WorkColumnProps> = ({
   activeSlug,
   onSelectProject,
 }) => {
+  const [isIndexOpen, setIsIndexOpen] = useState(false);
+
   return (
     <div className="w-full flex flex-col bg-white">
-      {/* Column Header: Work */}
-      <div className="h-9 px-4 sm:px-6 flex items-center border-b border-[rgba(0,0,0,0.15)] bg-white sticky top-0 z-10 shrink-0">
-        <span className="text-[13px] text-black font-normal">Work</span>
+      {/* Column Header: Work with + toggle like Resume */}
+      <div className="h-9 px-4 sm:px-6 flex items-center border-b border-[rgba(0,0,0,0.15)] bg-white sticky top-0 z-20 shrink-0">
+        <button
+          onClick={() => setIsIndexOpen(!isIndexOpen)}
+          className="text-[13px] text-black hover:opacity-75 cursor-pointer underline underline-offset-4 decoration-[rgba(0,0,0,0.4)] hover:decoration-black flex items-center gap-1.5 font-normal transition-opacity"
+          aria-expanded={isIndexOpen}
+          title="Work 목록 열기/닫기"
+        >
+          <span>Work</span>
+          <span className="text-[12px] text-[rgba(0,0,0,0.4)] no-underline">
+            {isIndexOpen ? '—' : '+'}
+          </span>
+        </button>
       </div>
+
+      {/* Expandable Project List without background color */}
+      {isIndexOpen && (
+        <div className="bg-white border-b border-[rgba(0,0,0,0.15)] px-4 sm:px-6 py-3 sticky top-9 z-10 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="divide-y divide-[rgba(0,0,0,0.06)]">
+            {(projects || []).filter(Boolean).map((project, index) => {
+              const formattedIndex = String(project.order || index + 1).padStart(2, '0');
+              const isActive = activeSlug === project.slug;
+
+              return (
+                <button
+                  key={project.slug}
+                  onClick={() => {
+                    onSelectProject(project.slug);
+                    const el = document.getElementById(`project-${project.slug}`);
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }}
+                  className={`w-full py-2 flex items-center justify-between text-[13px] text-left transition-colors group cursor-pointer ${
+                    isActive ? 'font-medium text-black' : 'text-[rgba(0,0,0,0.7)] hover:text-black'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate pr-2">
+                    <span className="text-[12px] text-[rgba(0,0,0,0.35)] group-hover:text-black font-mono">
+                      {formattedIndex}.
+                    </span>
+                    <span className={`truncate ${isActive ? 'underline underline-offset-4 text-black' : 'group-hover:underline'}`}>
+                      {project.title}
+                    </span>
+                  </div>
+                  <span className="text-[12px] text-[rgba(0,0,0,0.4)] whitespace-nowrap pl-2">
+                    {project.date}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Projects Feed */}
       <div className="divide-y divide-[rgba(0,0,0,0.15)]">
@@ -29,6 +81,7 @@ export const WorkColumn: React.FC<WorkColumnProps> = ({
           return (
             <article
               key={project.slug}
+              id={`project-${project.slug}`}
               className={`p-4 sm:p-6 transition-colors ${
                 isActive ? 'bg-[#FCFCFB]' : 'bg-white'
               }`}
