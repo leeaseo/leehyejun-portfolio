@@ -19,12 +19,54 @@ export default function App() {
   const [resumeData, setResumeData] = useState<ResumeData>(getResumeData);
   const [projectsList, setProjectsList] = useState<WorkProject[]>(getAllProjects);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    try {
+      return (
+        localStorage.getItem('leehyejun_admin_auth') === 'true' ||
+        sessionStorage.getItem('leehyejun_admin_auth') === 'true'
+      );
+    } catch {
+      return false;
+    }
+  });
 
   // Default to first project (Mobile Display System)
   const [activeProjectSlug, setActiveProjectSlug] = useState<string | null>('mobile-display-system');
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('work');
+
+  // Fetch latest shared content from server on mount (syncs PC, Mobile, and all devices)
+  useEffect(() => {
+    fetch('/api/content')
+      .then((res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data) => {
+        if (data) {
+          if (Array.isArray(data.projects) && data.projects.length > 0) {
+            setProjectsList(data.projects);
+            try {
+              localStorage.setItem('leehyejun_custom_projects', JSON.stringify(data.projects));
+            } catch {}
+          }
+          if (data.about && typeof data.about === 'object') {
+            setAboutData(data.about);
+            try {
+              localStorage.setItem('leehyejun_custom_about', JSON.stringify(data.about));
+            } catch {}
+          }
+          if (data.resume && typeof data.resume === 'object') {
+            setResumeData(data.resume);
+            try {
+              localStorage.setItem('leehyejun_custom_resume', JSON.stringify(data.resume));
+            } catch {}
+          }
+        }
+      })
+      .catch((err) => console.warn('Could not sync with server:', err));
+  }, []);
 
   // Read URL hash on load and handle hash changes
   useEffect(() => {
@@ -59,10 +101,14 @@ export default function App() {
     setActiveProjectSlug(slug);
     setMobileTab('more');
     window.location.hash = `#more/${slug}`;
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleClearActiveProject = () => {
     setActiveProjectSlug(null);
+    setMobileTab('work');
     window.location.hash = '';
   };
 
@@ -87,45 +133,62 @@ export default function App() {
     : null;
 
   return (
-    <div className="h-screen w-full bg-white text-black flex flex-col font-sans select-text overflow-hidden">
+    <div className="min-h-screen lg:h-screen w-full bg-white text-black flex flex-col font-sans select-text lg:overflow-hidden">
       {/* Mobile Top Navigation (only visible on mobile/tablet viewports) */}
-      <div className="lg:hidden h-9 px-4 border-b border-[rgba(0,0,0,0.15)] flex items-center justify-between bg-white sticky top-0 z-30 shrink-0">
-        <div className="text-[13px] font-normal text-black">Lee Hye Jun</div>
-        <div className="flex items-center gap-1 text-[13px]">
+      <header className="lg:hidden h-11 px-4 border-b border-[rgba(0,0,0,0.15)] flex items-center justify-between bg-white sticky top-0 z-30 shrink-0">
+        <button
+          onClick={() => {
+            setMobileTab('about');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className="text-[14px] font-medium text-black text-left cursor-pointer"
+        >
+          Lee Hye Jun
+        </button>
+        <nav className="flex items-center gap-1.5 text-[13px]">
           <button
-            onClick={() => setMobileTab('about')}
-            className={`px-2 py-0.5 cursor-pointer font-normal ${
-              mobileTab === 'about' ? 'text-black underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)]'
+            onClick={() => {
+              setMobileTab('about');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`px-2 py-1 cursor-pointer font-normal transition-colors ${
+              mobileTab === 'about' ? 'text-black font-medium underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)] hover:text-black'
             }`}
           >
             About
           </button>
           <span className="text-[rgba(0,0,0,0.2)]">/</span>
           <button
-            onClick={() => setMobileTab('work')}
-            className={`px-2 py-0.5 cursor-pointer font-normal ${
-              mobileTab === 'work' ? 'text-black underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)]'
+            onClick={() => {
+              setMobileTab('work');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`px-2 py-1 cursor-pointer font-normal transition-colors ${
+              mobileTab === 'work' ? 'text-black font-medium underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)] hover:text-black'
             }`}
           >
             Work
           </button>
           <span className="text-[rgba(0,0,0,0.2)]">/</span>
           <button
-            onClick={() => setMobileTab('more')}
-            className={`px-2 py-0.5 cursor-pointer font-normal ${
-              mobileTab === 'more' ? 'text-black underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)]'
+            onClick={() => {
+              setMobileTab('more');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`px-2 py-1 cursor-pointer font-normal transition-colors ${
+              mobileTab === 'more' ? 'text-black font-medium underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)] hover:text-black'
             }`}
           >
             More
           </button>
-        </div>
-      </div>
+        </nav>
+      </header>
 
       {/* Main 3-Column Grid Container */}
-      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-12 min-h-0 overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[rgba(0,0,0,0.15)]">
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-12 min-h-0 lg:overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[rgba(0,0,0,0.15)]">
         {/* Column 1: About & Resume (Left - 3 cols) */}
         <section
-          className={`h-full overflow-y-auto lg:col-span-3 ${
+          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto lg:col-span-3 ${
             mobileTab === 'about' ? 'block' : 'hidden lg:block'
           }`}
         >
@@ -134,7 +197,7 @@ export default function App() {
 
         {/* Column 2: Work (Middle - 5 cols) */}
         <section
-          className={`h-full overflow-y-auto lg:col-span-5 ${
+          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto lg:col-span-5 ${
             mobileTab === 'work' ? 'block' : 'hidden lg:block'
           }`}
         >
@@ -147,7 +210,7 @@ export default function App() {
 
         {/* Column 3: More (Right - 4 cols) */}
         <section
-          className={`h-full overflow-y-auto lg:col-span-4 ${
+          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto lg:col-span-4 ${
             mobileTab === 'more' ? 'block' : 'hidden lg:block'
           }`}
         >
@@ -165,7 +228,10 @@ export default function App() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsAdminOpen(true)}
+            onClick={() => {
+              setIsAdminOpen(true);
+              window.location.hash = 'admin';
+            }}
             className="flex items-center gap-1 text-[11px] text-[rgba(0,0,0,0.5)] hover:text-black border border-[rgba(0,0,0,0.2)] hover:border-black px-2 py-0.5 transition-colors cursor-pointer"
           >
             <Plus size={10} />
@@ -178,8 +244,13 @@ export default function App() {
       {isAdminOpen && (
         <AdminPublishModal
           isOpen={isAdminOpen}
+          isAuthenticated={isAdminAuthenticated}
+          onAuthenticatedChange={setIsAdminAuthenticated}
           onClose={() => {
             setIsAdminOpen(false);
+            if (window.location.hash === '#admin') {
+              window.location.hash = '';
+            }
             setProjectsList(getAllProjects());
             setAboutData(getAboutData());
             setResumeData(getResumeData());

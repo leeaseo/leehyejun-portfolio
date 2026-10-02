@@ -1,5 +1,6 @@
 import aboutJson from '../content/about.json';
 import resumeJson from '../content/resume.json';
+import customDataJson from '../content/custom-data.json';
 import { AboutData, ResumeData, WorkProject, PostItem, PostAttachment } from './types';
 
 // Load MDX raw strings at build/bundle time via Vite eager glob
@@ -151,7 +152,23 @@ export function getAboutData(): AboutData {
   } catch {
     // fallback
   }
+  if ((customDataJson as any)?.about) {
+    return (customDataJson as any).about as AboutData;
+  }
   return aboutJson as AboutData;
+}
+
+export async function syncToServer(data: { projects?: WorkProject[]; about?: AboutData; resume?: ResumeData }): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    await fetch('/api/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+  } catch (err) {
+    console.warn('Sync to server warning:', err);
+  }
 }
 
 export function saveAboutData(data: AboutData): void {
@@ -160,6 +177,7 @@ export function saveAboutData(data: AboutData): void {
   } catch (err) {
     console.error('Failed to save about data:', err);
   }
+  syncToServer({ about: data });
 }
 
 export function getResumeData(): ResumeData {
@@ -169,17 +187,20 @@ export function getResumeData(): ResumeData {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         return {
-          education: Array.isArray(parsed.education) ? parsed.education : (resumeJson.education || []),
-          honors: Array.isArray(parsed.honors) ? parsed.honors : (resumeJson.honors || []),
-          skills: Array.isArray(parsed.skills) ? parsed.skills : (resumeJson.skills || []),
-          certifications: Array.isArray(parsed.certifications) ? parsed.certifications : (resumeJson.certifications || []),
-          experience: Array.isArray(parsed.experience) ? parsed.experience : (resumeJson.experience || []),
-          resumePdf: parsed.resumePdf || resumeJson.resumePdf || '',
+          education: Array.isArray(parsed.education) ? parsed.education : ((customDataJson as any)?.resume?.education || resumeJson.education || []),
+          honors: Array.isArray(parsed.honors) ? parsed.honors : ((customDataJson as any)?.resume?.honors || resumeJson.honors || []),
+          skills: Array.isArray(parsed.skills) ? parsed.skills : ((customDataJson as any)?.resume?.skills || resumeJson.skills || []),
+          certifications: Array.isArray(parsed.certifications) ? parsed.certifications : ((customDataJson as any)?.resume?.certifications || resumeJson.certifications || []),
+          experience: Array.isArray(parsed.experience) ? parsed.experience : ((customDataJson as any)?.resume?.experience || resumeJson.experience || []),
+          resumePdf: parsed.resumePdf || (customDataJson as any)?.resume?.resumePdf || resumeJson.resumePdf || '',
         };
       }
     }
   } catch {
     // fallback
+  }
+  if ((customDataJson as any)?.resume) {
+    return (customDataJson as any).resume as ResumeData;
   }
   return resumeJson as ResumeData;
 }
@@ -190,12 +211,19 @@ export function saveResumeData(data: ResumeData): void {
   } catch (err) {
     console.error('Failed to save resume data:', err);
   }
+  syncToServer({ resume: data });
 }
 
 export function getCustomProjects(): WorkProject[] {
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_projects') : null;
-    return raw ? JSON.parse(raw) : [];
+    if (raw) {
+      return JSON.parse(raw);
+    }
+    if ((customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects)) {
+      return (customDataJson as any).projects;
+    }
+    return [];
   } catch {
     return [];
   }
@@ -209,8 +237,8 @@ export function saveCustomProject(project: WorkProject): void {
     localStorage.setItem('leehyejun_custom_projects', JSON.stringify(updated));
   } catch (err) {
     console.error('Failed to save projects to localStorage:', err);
-    alert('이미지 용량이 너무 커서 브라우저 저장소 용량이 초과되었습니다. 이미지를 압축하여 저장합니다.');
   }
+  syncToServer({ projects: getAllProjects() });
 }
 
 export function deleteCustomProject(slug: string): void {
@@ -221,6 +249,7 @@ export function deleteCustomProject(slug: string): void {
   } catch (err) {
     console.error('Failed to update projects:', err);
   }
+  syncToServer({ projects: getAllProjects() });
 }
 
 export function getAllProjects(): WorkProject[] {

@@ -33,6 +33,8 @@ interface AdminPublishModalProps {
   onProjectAdded: (newProject: WorkProject) => void;
   onAboutUpdated: (newAbout: AboutData) => void;
   onResumeUpdated: (newResume: ResumeData) => void;
+  isAuthenticated?: boolean;
+  onAuthenticatedChange?: (authed: boolean) => void;
 }
 
 export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
@@ -40,8 +42,26 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   onProjectAdded,
   onAboutUpdated,
   onResumeUpdated,
+  isAuthenticated: propIsAuthenticated,
+  onAuthenticatedChange,
 }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (propIsAuthenticated !== undefined) return propIsAuthenticated;
+    try {
+      return (
+        localStorage.getItem('leehyejun_admin_auth') === 'true' ||
+        sessionStorage.getItem('leehyejun_admin_auth') === 'true'
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  React.useEffect(() => {
+    if (propIsAuthenticated !== undefined) {
+      setIsAuthenticated(propIsAuthenticated);
+    }
+  }, [propIsAuthenticated]);
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -134,9 +154,27 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     e.preventDefault();
     if (password === 'leeaseo8626') {
       setIsAuthenticated(true);
+      onAuthenticatedChange?.(true);
+      try {
+        localStorage.setItem('leehyejun_admin_auth', 'true');
+        sessionStorage.setItem('leehyejun_admin_auth', 'true');
+      } catch (err) {
+        console.warn(err);
+      }
       setErrorMsg('');
     } else {
       setErrorMsg('비밀번호가 올바르지 않습니다.');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    onAuthenticatedChange?.(false);
+    try {
+      localStorage.removeItem('leehyejun_admin_auth');
+      sessionStorage.removeItem('leehyejun_admin_auth');
+    } catch (err) {
+      console.warn(err);
     }
   };
 
@@ -338,19 +376,19 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
       <div className="bg-white w-full max-w-2xl max-h-[92vh] flex flex-col border border-black shadow-2xl animate-in zoom-in-95 duration-150">
         {/* Modal Top Header */}
-        <div className="h-11 px-4 sm:px-5 border-b border-[rgba(0,0,0,0.15)] flex items-center justify-between bg-white shrink-0">
-          <div className="flex items-center gap-2 text-[13px] font-normal text-black">
+        <div className="min-h-11 px-3 sm:px-5 py-2 sm:py-0 border-b border-[rgba(0,0,0,0.15)] flex flex-wrap items-center justify-between gap-2 bg-white shrink-0">
+          <div className="flex items-center gap-1.5 text-[12px] sm:text-[13px] font-normal text-black">
             {isAuthenticated ? <Unlock size={14} /> : <Lock size={14} />}
-            <span>Admin Center (leehyejun)</span>
+            <span className="truncate">Admin Center (leehyejun)</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {isAuthenticated && (
-              <div className="flex items-center border border-[rgba(0,0,0,0.15)] text-[12px]">
+              <div className="flex items-center border border-[rgba(0,0,0,0.15)] text-[11px] sm:text-[12px]">
                 <button
                   type="button"
                   onClick={() => setMainSection('work')}
-                  className={`px-3 py-1 flex items-center gap-1 ${mainSection === 'work' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
+                  className={`px-2.5 sm:px-3 py-1 flex items-center gap-1 ${mainSection === 'work' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
                 >
                   <Briefcase size={11} />
                   <span>Work</span>
@@ -358,7 +396,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 <button
                   type="button"
                   onClick={() => setMainSection('about')}
-                  className={`px-3 py-1 flex items-center gap-1 ${mainSection === 'about' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
+                  className={`px-2.5 sm:px-3 py-1 flex items-center gap-1 ${mainSection === 'about' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
                 >
                   <User size={11} />
                   <span>About</span>
@@ -366,12 +404,22 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 <button
                   type="button"
                   onClick={() => setMainSection('resume')}
-                  className={`px-3 py-1 flex items-center gap-1 ${mainSection === 'resume' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
+                  className={`px-2.5 sm:px-3 py-1 flex items-center gap-1 ${mainSection === 'resume' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
                 >
                   <FileText size={11} />
                   <span>Resume</span>
                 </button>
               </div>
+            )}
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="text-[11px] text-[rgba(0,0,0,0.5)] hover:text-black underline cursor-pointer"
+                title="로그아웃"
+              >
+                로그아웃
+              </button>
             )}
             <button
               onClick={onClose}
@@ -421,7 +469,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
             <form onSubmit={handleSaveAbout} className="space-y-4">
               <div className="font-normal text-black pb-2 border-b border-[rgba(0,0,0,0.15)] flex justify-between items-center">
                 <span>About 정보 직접 수정</span>
-                <span className="text-[11px] text-[rgba(0,0,0,0.45)]">저장 시 즉각 반영됩니다</span>
+                <span className="text-[11px] text-[rgba(0,0,0,0.45)]">저장 시 웹사이트 및 모바일에 즉시 자동 배포됩니다</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -499,8 +547,8 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   type="submit"
                   className="bg-black text-white px-5 py-2 text-[13px] font-normal hover:bg-neutral-800 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  {isSaved ? <Check size={14} /> : null}
-                  <span>{isSaved ? '저장 완료!' : 'About 변경 내용 저장'}</span>
+                  {isSaved ? <Check size={14} /> : <Plus size={14} />}
+                  <span>{isSaved ? '적용 완료!' : '+ 웹사이트에 즉시 적용 (Publish)'}</span>
                 </button>
               </div>
             </form>
@@ -511,7 +559,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
             <form onSubmit={handleSaveResume} className="space-y-6">
               <div className="font-normal text-black pb-2 border-b border-[rgba(0,0,0,0.15)] flex justify-between items-center">
                 <span>Resume 내용 직접 수정</span>
-                <span className="text-[11px] text-[rgba(0,0,0,0.45)]">저장 시 이력서에 즉각 반영</span>
+                <span className="text-[11px] text-[rgba(0,0,0,0.45)]">저장 시 웹사이트 및 모바일에 즉시 자동 배포됩니다</span>
               </div>
 
               {/* 1. 교육 */}
@@ -734,8 +782,8 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   type="submit"
                   className="bg-black text-white px-5 py-2 text-[13px] font-normal hover:bg-neutral-800 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  {isSaved ? <Check size={14} /> : null}
-                  <span>{isSaved ? '저장 완료!' : 'Resume 변경 내용 저장'}</span>
+                  {isSaved ? <Check size={14} /> : <Plus size={14} />}
+                  <span>{isSaved ? '적용 완료!' : '+ 웹사이트에 즉시 적용 (Publish)'}</span>
                 </button>
               </div>
             </form>

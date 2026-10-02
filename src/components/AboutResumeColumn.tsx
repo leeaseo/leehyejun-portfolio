@@ -22,15 +22,15 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
 
       {/* About Section Body */}
       <div className="px-4 sm:px-6 py-5 space-y-6">
-        {/* Info Grid: 좌측정렬로 열맞춤 (요구사항 2 반영) */}
-        <div className="grid grid-cols-2 gap-4 text-[13px] leading-relaxed">
+        {/* Info Grid: 좌측정렬로 열맞춤 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-[13px] leading-relaxed">
           {/* Column 1: Role & Location */}
           <div className="space-y-0.5 text-left">
             <div className="text-black font-normal">{aboutData.role || 'Furniture Designer'}</div>
             <div className="text-black font-normal">{aboutData.location}</div>
           </div>
 
-          {/* Column 2: Lee Hye Jun & Email (우측정렬 -> 좌측정렬로 열맞춰 변경) */}
+          {/* Column 2: Lee Hye Jun & Email */}
           <div className="space-y-0.5 text-left">
             <div className="text-black font-normal">Lee Hye Jun</div>
             <div>
@@ -74,11 +74,11 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                     교육
                   </div>
                   {(resumeData?.education || []).map((edu, idx) => (
-                    <div key={idx} className="flex justify-between items-baseline text-[13px] gap-2">
+                    <div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline text-[13px] gap-0.5 sm:gap-2">
                       <span className="text-black font-normal">
                         {edu.school} {edu.major}
                       </span>
-                      <span className="text-[13px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
+                      <span className="text-[12.5px] sm:text-[13px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
                         ({edu.period})
                       </span>
                     </div>
