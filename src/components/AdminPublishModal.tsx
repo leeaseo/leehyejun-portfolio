@@ -25,6 +25,9 @@ import {
   FileText,
   Briefcase,
   Loader2,
+  GripVertical,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 interface AdminPublishModalProps {
@@ -249,6 +252,64 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
 
   const handleRemoveDetailImage = (indexToRemove: number) => {
     setDetailImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  // Drag and drop states for detail images reordering
+  const [draggedDetailIdx, setDraggedDetailIdx] = useState<number | null>(null);
+  const [dragOverDetailIdx, setDragOverDetailIdx] = useState<number | null>(null);
+
+  const handleDragStartDetail = (e: React.DragEvent, index: number) => {
+    setDraggedDetailIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', String(index));
+    } catch {}
+  };
+
+  const handleDragEnterDetail = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedDetailIdx === null || draggedDetailIdx === index) return;
+    setDragOverDetailIdx(index);
+  };
+
+  const handleDragOverDetail = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropDetail = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedDetailIdx === null || draggedDetailIdx === targetIndex) {
+      setDraggedDetailIdx(null);
+      setDragOverDetailIdx(null);
+      return;
+    }
+
+    setDetailImages((prev) => {
+      const copy = [...prev];
+      const [movedItem] = copy.splice(draggedDetailIdx, 1);
+      copy.splice(targetIndex, 0, movedItem);
+      return copy;
+    });
+
+    setDraggedDetailIdx(null);
+    setDragOverDetailIdx(null);
+  };
+
+  const handleDragEndDetail = () => {
+    setDraggedDetailIdx(null);
+    setDragOverDetailIdx(null);
+  };
+
+  const handleMoveDetailStep = (fromIndex: number, direction: 'left' | 'right') => {
+    const toIndex = direction === 'left' ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= detailImages.length) return;
+    setDetailImages((prev) => {
+      const copy = [...prev];
+      const [movedItem] = copy.splice(fromIndex, 1);
+      copy.splice(toIndex, 0, movedItem);
+      return copy;
+    });
   };
 
   const handleSelectProjectToEdit = (proj: WorkProject) => {
@@ -1122,32 +1183,119 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   </div>
                 </div>
 
-                {/* Detail Images Grid Preview */}
+                {/* Detail Images Grid Preview with Drag & Drop Reordering */}
                 {detailImages.length > 0 ? (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
-                    {detailImages.map((imgSrc, idx) => (
-                      <div
-                        key={idx}
-                        className="relative group border border-[rgba(0,0,0,0.2)] bg-white h-24 overflow-hidden"
-                      >
-                        <img
-                          src={imgSrc}
-                          alt={`Detail ${idx + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveDetailImage(idx)}
-                          className="absolute top-1 right-1 bg-black text-white p-1 rounded-xs hover:bg-red-600 transition-colors"
-                          title="삭제"
-                        >
-                          <X size={11} />
-                        </button>
-                        <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1 font-mono">
-                          #{idx + 1}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between text-[11px] text-[rgba(0,0,0,0.55)] bg-white px-2 py-1.5 border border-[rgba(0,0,0,0.1)]">
+                      <span className="flex items-center gap-1.5">
+                        <GripVertical size={13} className="text-neutral-500" />
+                        <span><strong>드래그 & 드롭</strong>으로 사진 순서를 자유롭게 바꿀 수 있습니다. (마우스로 끌어서 이동 또는 ◀ ▶ 클릭)</span>
+                      </span>
+                      <span className="font-mono text-[10.5px] text-[rgba(0,0,0,0.4)]">총 {detailImages.length}장</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      {detailImages.map((imgSrc, idx) => {
+                        const isDragging = draggedDetailIdx === idx;
+                        const isOver = dragOverDetailIdx === idx && !isDragging;
+
+                        return (
+                          <div
+                            key={idx}
+                            draggable
+                            onDragStart={(e) => handleDragStartDetail(e, idx)}
+                            onDragEnter={(e) => handleDragEnterDetail(e, idx)}
+                            onDragOver={handleDragOverDetail}
+                            onDrop={(e) => handleDropDetail(e, idx)}
+                            onDragEnd={handleDragEndDetail}
+                            className={`relative group bg-white border h-28 overflow-hidden transition-all select-none cursor-grab active:cursor-grabbing ${
+                              isDragging
+                                ? 'opacity-30 scale-95 border-2 border-dashed border-black'
+                                : isOver
+                                ? 'ring-2 ring-black border-black scale-[1.02] shadow-md z-10'
+                                : 'border-[rgba(0,0,0,0.2)] hover:border-black hover:shadow-xs'
+                            }`}
+                          >
+                            <img
+                              src={imgSrc}
+                              alt={`Detail ${idx + 1}`}
+                              className="w-full h-full object-cover pointer-events-none"
+                            />
+
+                            {/* Drag Indicator Overlay */}
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
+
+                            {/* Top Left: Order Badge & Drag Grip Handle */}
+                            <div className="absolute top-1.5 left-1.5 flex items-center gap-1 pointer-events-none">
+                              <span className="bg-black/85 text-white text-[10px] px-1.5 py-0.5 font-mono font-medium shadow-xs">
+                                #{idx + 1}
+                              </span>
+                              <div
+                                className="bg-white/90 text-black p-0.5 shadow-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="드래그하여 이동"
+                              >
+                                <GripVertical size={11} />
+                              </div>
+                            </div>
+
+                            {/* Top Right: Delete Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveDetailImage(idx);
+                              }}
+                              className="absolute top-1.5 right-1.5 bg-black/80 text-white p-1 rounded-xs hover:bg-red-600 transition-colors cursor-pointer shadow-xs z-10"
+                              title="사진 삭제"
+                            >
+                              <X size={11} />
+                            </button>
+
+                            {/* Bottom Controls Bar on Hover: ◀ Left, Set as Thumbnail, Right ▶ */}
+                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 via-black/60 to-transparent p-1.5 pt-3.5 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveDetailStep(idx, 'left');
+                                  }}
+                                  className="text-white bg-black/70 hover:bg-black p-1 disabled:opacity-25 disabled:hover:bg-black/70 cursor-pointer disabled:cursor-not-allowed transition-colors"
+                                  title="왼쪽(앞)으로 이동"
+                                >
+                                  <ChevronLeft size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === detailImages.length - 1}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveDetailStep(idx, 'right');
+                                  }}
+                                  className="text-white bg-black/70 hover:bg-black p-1 disabled:opacity-25 disabled:hover:bg-black/70 cursor-pointer disabled:cursor-not-allowed transition-colors"
+                                  title="오른쪽(뒤)으로 이동"
+                                >
+                                  <ChevronRight size={11} />
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setThumbnail(imgSrc);
+                                }}
+                                className="text-[9.5px] bg-white text-black px-1.5 py-0.5 font-normal hover:bg-neutral-200 cursor-pointer transition-colors shadow-xs"
+                                title="이 사진을 Work 대표사진으로 설정"
+                              >
+                                대표로 지정
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : (
                   <div className="text-[11.5px] text-[rgba(0,0,0,0.4)] py-1">
