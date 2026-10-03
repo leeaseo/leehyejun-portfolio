@@ -10,7 +10,7 @@ import {
   saveResumeData,
   syncToServer,
 } from '../lib/content';
-import { savePortfolioToFirestore } from '../lib/firebase';
+import { savePortfolioToFirestore, deleteProjectFromFirestore } from '../lib/firebase';
 import { compressImageFile } from '../lib/imageCompressor';
 import {
   X,
@@ -217,7 +217,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     if (file) {
       try {
         setIsCompressing(true);
-        const compressedBase64 = await compressImageFile(file, 1280, 1280, 0.84);
+        const compressedBase64 = await compressImageFile(file, 1920, 0.85);
         setThumbnail(compressedBase64);
       } catch (err) {
         console.error('Failed to compress thumbnail:', err);
@@ -236,7 +236,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         setIsCompressing(true);
         const compressedList: string[] = [];
         for (const file of Array.from(files)) {
-          const compressed = await compressImageFile(file, 1280, 1280, 0.82);
+          const compressed = await compressImageFile(file, 1920, 0.85);
           compressedList.push(compressed);
         }
         setDetailImages((prev) => [...prev, ...compressedList]);
@@ -355,6 +355,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const handleDeleteProject = (slugToDelete: string) => {
     if (confirm('정말 이 프로젝트를 삭제하시겠습니까?')) {
       deleteCustomProject(slugToDelete);
+      deleteProjectFromFirestore(slugToDelete).catch(() => {});
       const updated = getAllProjects();
       setProjectsList(updated);
       if (editingSlug === slugToDelete) {
@@ -427,6 +428,13 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     onProjectAdded(projectData);
     setIsSaved(true);
 
+    // Save directly to Google Cloud Firestore permanently!
+    savePortfolioToFirestore({
+      projects: refreshed,
+      about: getAboutData(),
+      resume: getResumeData(),
+    }).catch((err) => console.error('[Firestore] Save error:', err));
+
     setTimeout(() => {
       setIsSaved(false);
       onClose();
@@ -439,6 +447,13 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     saveAboutData(aboutForm);
     onAboutUpdated(aboutForm);
     setIsSaved(true);
+
+    savePortfolioToFirestore({
+      projects: getAllProjects(),
+      about: aboutForm,
+      resume: getResumeData(),
+    }).catch((err) => console.error('[Firestore] Save error:', err));
+
     setTimeout(() => {
       setIsSaved(false);
       onClose();
@@ -451,6 +466,13 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     saveResumeData(resumeForm);
     onResumeUpdated(resumeForm);
     setIsSaved(true);
+
+    savePortfolioToFirestore({
+      projects: getAllProjects(),
+      about: getAboutData(),
+      resume: resumeForm,
+    }).catch((err) => console.error('[Firestore] Save error:', err));
+
     setTimeout(() => {
       setIsSaved(false);
       onClose();
@@ -720,86 +742,11 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 ))}
               </div>
 
-              {/* 2. 경험 및 수상 */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase font-mono">
-                    2. 경험 및 수상 (Honors & Projects)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const copy = resumeForm.honors ? [...resumeForm.honors] : [];
-                      copy.push({ title: '', period: '' });
-                      setResumeForm({ ...resumeForm, honors: copy });
-                    }}
-                    className="text-[11px] text-black underline"
-                  >
-                    + 항목 추가
-                  </button>
-                </div>
-                {(resumeForm.honors || []).map((h, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="수상 / 경험 내역"
-                      value={h.title}
-                      onChange={(e) => {
-                        const copy = [...(resumeForm.honors || [])];
-                        copy[idx].title = e.target.value;
-                        setResumeForm({ ...resumeForm, honors: copy });
-                      }}
-                      className="flex-1 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px]"
-                    />
-                    <input
-                      type="text"
-                      placeholder="연도"
-                      value={h.period}
-                      onChange={(e) => {
-                        const copy = [...(resumeForm.honors || [])];
-                        copy[idx].period = e.target.value;
-                        setResumeForm({ ...resumeForm, honors: copy });
-                      }}
-                      className="w-24 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const copy = (resumeForm.honors || []).filter((_, i) => i !== idx);
-                        setResumeForm({ ...resumeForm, honors: copy });
-                      }}
-                      className="text-red-600 p-1"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* 3. 자격 및 능력 */}
-              <div className="space-y-2">
-                <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase font-mono">
-                  3. 자격 및 소프트웨어 능력 (쉼표로 구분)
-                </label>
-                <input
-                  type="text"
-                  placeholder="보유 스킬 (예: Auto CAD, Adobe softwares, Sketch Up, 3D MAX)"
-                  value={(resumeForm.skills || []).join(', ')}
-                  onChange={(e) =>
-                    setResumeForm({
-                      ...resumeForm,
-                      skills: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                    })
-                  }
-                  className="w-full border border-[rgba(0,0,0,0.25)] px-2.5 py-1.5 text-[12.5px]"
-                />
-              </div>
-
-              {/* 4. 경력 */}
+              {/* 2. 경력 사항 (Experience) */}
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase font-mono">
-                    4. 경력 사항 (Experience)
+                    2. 경력 사항 (Experience)
                   </label>
                   <button
                     type="button"
@@ -817,6 +764,21 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   >
                     + 경력 추가
                   </button>
+                </div>
+
+                <div>
+                  <label className="block text-[10.5px] text-[rgba(0,0,0,0.4)] mb-1">
+                    총 경력 요약 (예: 총 5년 11개월)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="총 5년 11개월"
+                    value={resumeForm.totalExperience || ''}
+                    onChange={(e) =>
+                      setResumeForm({ ...resumeForm, totalExperience: e.target.value })
+                    }
+                    className="w-full sm:w-64 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px] bg-white"
+                  />
                 </div>
 
                 {(resumeForm.experience || []).map((exp, idx) => (
@@ -889,6 +851,81 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* 3. 경험 및 활동 (Honors & Activities) */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase font-mono">
+                    3. 경험 및 수상 (Honors & Activities)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const copy = resumeForm.honors ? [...resumeForm.honors] : [];
+                      copy.push({ title: '', period: '' });
+                      setResumeForm({ ...resumeForm, honors: copy });
+                    }}
+                    className="text-[11px] text-black underline"
+                  >
+                    + 항목 추가
+                  </button>
+                </div>
+                {(resumeForm.honors || []).map((h, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="수상 / 경험 내역"
+                      value={h.title}
+                      onChange={(e) => {
+                        const copy = [...(resumeForm.honors || [])];
+                        copy[idx].title = e.target.value;
+                        setResumeForm({ ...resumeForm, honors: copy });
+                      }}
+                      className="flex-1 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px]"
+                    />
+                    <input
+                      type="text"
+                      placeholder="연도"
+                      value={h.period}
+                      onChange={(e) => {
+                        const copy = [...(resumeForm.honors || [])];
+                        copy[idx].period = e.target.value;
+                        setResumeForm({ ...resumeForm, honors: copy });
+                      }}
+                      className="w-24 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const copy = (resumeForm.honors || []).filter((_, i) => i !== idx);
+                        setResumeForm({ ...resumeForm, honors: copy });
+                      }}
+                      className="text-red-600 p-1"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* 4. 자격 및 소프트웨어 능력 */}
+              <div className="space-y-2">
+                <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase font-mono">
+                  4. 자격 및 소프트웨어 능력 (쉼표로 구분)
+                </label>
+                <input
+                  type="text"
+                  placeholder="보유 스킬 (예: Auto CAD, Adobe softwares, Sketch Up, 3D MAX)"
+                  value={(resumeForm.skills || []).join(', ')}
+                  onChange={(e) =>
+                    setResumeForm({
+                      ...resumeForm,
+                      skills: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
+                  className="w-full border border-[rgba(0,0,0,0.25)] px-2.5 py-1.5 text-[12.5px]"
+                />
               </div>
 
               <div className="pt-3 border-t border-[rgba(0,0,0,0.15)] flex justify-end">

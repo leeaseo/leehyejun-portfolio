@@ -34,6 +34,7 @@ export interface ResumeHonor {
 }
 
 export interface ResumeData {
+  totalExperience?: string;
   experience: ResumeExperience[];
   education: ResumeEducation[];
   skills: string[];

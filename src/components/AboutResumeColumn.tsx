@@ -26,13 +26,13 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-[13px] leading-relaxed">
           {/* Column 1: Role & Location */}
           <div className="space-y-0.5 text-left">
-            <div className="text-black font-normal">{aboutData.role || 'Furniture Designer'}</div>
+            <div className="text-black font-bold">{aboutData.role || 'Furniture Designer'}</div>
             <div className="text-black font-normal">{aboutData.location}</div>
           </div>
 
           {/* Column 2: Lee Hye Jun & Email */}
           <div className="space-y-0.5 text-left">
-            <div className="text-black font-normal">Lee Hye Jun</div>
+            <div className="text-black font-bold">Lee Hye Jun</div>
             <div>
               <a
                 href="mailto:15682@naver.com"
@@ -70,7 +70,7 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
               <div className="mt-5 space-y-6 text-[13px] animate-in fade-in duration-200">
                 {/* 1. 교육 */}
                 <div className="space-y-2 pb-4 border-b border-[rgba(0,0,0,0.1)]">
-                  <div className="text-[13px] font-normal text-black">
+                  <div className="text-[13px] font-bold text-black">
                     교육
                   </div>
                   {(resumeData?.education || []).map((edu, idx) => (
@@ -78,17 +78,57 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                       <span className="text-black font-normal">
                         {edu.school} {edu.major}
                       </span>
-                      <span className="text-[12.5px] sm:text-[13px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
+                      <span className="text-[12px] sm:text-[12.5px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
                         ({edu.period})
                       </span>
                     </div>
                   ))}
                 </div>
 
-                {/* 2. 경험 */}
-                {Array.isArray(resumeData.honors) && resumeData.honors.length > 0 && (
+                {/* 2. 경력 */}
+                {Array.isArray(resumeData?.experience) && resumeData.experience.length > 0 && (
+                  <div className="space-y-4 pb-4 border-b border-[rgba(0,0,0,0.1)]">
+                    <div className="flex justify-between items-baseline">
+                      <div className="text-[13px] font-bold text-black">
+                        경력
+                      </div>
+                      <span className="text-[12px] sm:text-[12.5px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
+                        {resumeData?.totalExperience || '총 5년 11개월'}
+                      </span>
+                    </div>
+                    <div className="space-y-4">
+                      {resumeData.experience.map((exp, idx) => (
+                        <div key={idx} className="space-y-1.5 text-[13px]">
+                          {/* Company, Role, Period */}
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
+                            <span className="font-normal text-black">
+                              {exp?.company} · {exp?.role}
+                            </span>
+                            <span className="text-[12px] sm:text-[12.5px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
+                              {exp?.period}
+                            </span>
+                          </div>
+
+                          {/* Task bullets */}
+                          {Array.isArray(exp?.tasks) && exp.tasks.length > 0 && (
+                            <ul className="pl-4 space-y-1 text-[13px] text-[rgba(0,0,0,0.75)] list-disc">
+                              {exp.tasks.map((task, tIdx) => (
+                                <li key={tIdx} className="leading-relaxed">
+                                  {task}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. 경험 */}
+                {Array.isArray(resumeData?.honors) && resumeData.honors.length > 0 && (
                   <div className="space-y-2 pb-4 border-b border-[rgba(0,0,0,0.1)]">
-                    <div className="text-[13px] font-normal text-black">
+                    <div className="text-[13px] font-bold text-black">
                       경험
                     </div>
                     <div className="space-y-1.5">
@@ -97,7 +137,7 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                           <span className="text-black font-normal pr-1">
                             {honor?.title}
                           </span>
-                          <span className="text-[13px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
+                          <span className="text-[12px] sm:text-[12.5px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
                             ({honor?.period})
                           </span>
                         </div>
@@ -106,9 +146,9 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                   </div>
                 )}
 
-                {/* 3. 자격 및 능력 */}
-                <div className="space-y-2 pb-4 border-b border-[rgba(0,0,0,0.1)]">
-                  <div className="text-[13px] font-normal text-black">
+                {/* 4. 자격 및 능력 */}
+                <div className="space-y-2">
+                  <div className="text-[13px] font-bold text-black">
                     자격 및 능력
                   </div>
                   <div className="space-y-1 text-[13px] text-black leading-relaxed">
@@ -118,39 +158,6 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                     <div className="text-black">
                       {(Array.isArray(resumeData?.skills) ? resumeData.skills : []).join(', ')}
                     </div>
-                  </div>
-                </div>
-
-                {/* 4. 경력 */}
-                <div className="space-y-5">
-                  <div className="text-[13px] font-normal text-black">
-                    경력
-                  </div>
-                  <div className="space-y-5">
-                    {(Array.isArray(resumeData?.experience) ? resumeData.experience : []).map((exp, idx) => (
-                      <div key={idx} className="space-y-1.5 text-[13px]">
-                        {/* Company, Role, Period (좌측 탭 여유 확보로 줄바꿈 방지) */}
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
-                          <span className="font-normal text-black">
-                            {exp?.company} · {exp?.role}
-                          </span>
-                          <span className="text-[12.5px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
-                            {exp?.period}
-                          </span>
-                        </div>
-
-                        {/* Task bullets */}
-                        {Array.isArray(exp?.tasks) && exp.tasks.length > 0 && (
-                          <ul className="pl-4 space-y-1 text-[13px] text-[rgba(0,0,0,0.75)] list-disc">
-                            {exp.tasks.map((task, tIdx) => (
-                              <li key={tIdx} className="leading-relaxed">
-                                {task}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
                   </div>
                 </div>
               </div>

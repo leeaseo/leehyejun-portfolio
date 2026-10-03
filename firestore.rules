@@ -3,7 +3,15 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /content/{contentId} {
       allow read: if true;
-      allow write: if contentId == 'portfolio';
+      allow write: if true;
+    }
+    match /projects/{projectId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /images/{imageId} {
+      allow read: if true;
+      allow write: if true;
     }
   }
 }

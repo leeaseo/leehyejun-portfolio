@@ -208,6 +208,7 @@ export function getResumeData(): ResumeData {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         return {
+          totalExperience: parsed.totalExperience || ((customDataJson as any)?.resume?.totalExperience || (resumeJson as any).totalExperience || '총 5년 11개월'),
           education: Array.isArray(parsed.education) ? parsed.education : ((customDataJson as any)?.resume?.education || resumeJson.education || []),
           honors: Array.isArray(parsed.honors) ? parsed.honors : ((customDataJson as any)?.resume?.honors || resumeJson.honors || []),
           skills: Array.isArray(parsed.skills) ? parsed.skills : ((customDataJson as any)?.resume?.skills || resumeJson.skills || []),
