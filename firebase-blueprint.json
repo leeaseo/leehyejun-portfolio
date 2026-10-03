@@ -1,0 +1,34 @@
+{
+  "entities": {
+    "PortfolioContent": {
+      "title": "PortfolioContent",
+      "description": "Global portfolio configuration including projects, about, and resume data",
+      "type": "object",
+      "properties": {
+        "projects": {
+          "type": "array",
+          "description": "List of portfolio work projects"
+        },
+        "about": {
+          "type": "object",
+          "description": "About profile data"
+        },
+        "resume": {
+          "type": "object",
+          "description": "Resume profile data"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["updatedAt"]
+    }
+  },
+  "firestore": {
+    "/content/{contentId}": {
+      "schema": "PortfolioContent",
+      "description": "Shared portfolio content storage"
+    }
+  }
+}

@@ -3,6 +3,7 @@ import resumeJson from '../content/resume.json';
 import customDataJson from '../content/custom-data.json';
 import { AboutData, ResumeData, WorkProject, PostItem, PostAttachment } from './types';
 import { idbGet, idbSet } from './idbStorage';
+import { savePortfolioToFirestore } from './firebase';
 
 // In-memory cache for full-fidelity projects (bypasses 5MB localStorage quota)
 let memoryCustomProjects: WorkProject[] | null = null;
@@ -173,6 +174,13 @@ export function getAboutData(): AboutData {
 
 export async function syncToServer(data: { projects?: WorkProject[]; about?: AboutData; resume?: ResumeData }): Promise<void> {
   if (typeof window === 'undefined') return;
+  // 1. Direct save to Google Cloud Firestore from client
+  try {
+    await savePortfolioToFirestore(data);
+  } catch (err) {
+    console.warn('[Firestore] Client sync error:', err);
+  }
+  // 2. Also sync to /api/publish
   try {
     await fetch('/api/publish', {
       method: 'POST',

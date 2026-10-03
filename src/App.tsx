@@ -8,8 +8,11 @@ import {
   getResumeData,
   getAllProjects,
   getProjectBySlug,
+  syncToServer,
 } from './lib/content';
 import { WorkProject, AboutData, ResumeData } from './lib/types';
+import { idbGet, idbSet } from './lib/idbStorage';
+import { fetchPortfolioFromFirestore, savePortfolioToFirestore } from './lib/firebase';
 import { Plus } from 'lucide-react';
 
 type MobileTab = 'about' | 'work' | 'more';
@@ -19,6 +22,7 @@ export default function App() {
   const [resumeData, setResumeData] = useState<ResumeData>(getResumeData);
   const [projectsList, setProjectsList] = useState<WorkProject[]>(getAllProjects);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     try {
       return (
@@ -39,40 +43,91 @@ export default function App() {
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('work');
 
-  // Fetch latest shared content from server on mount (syncs PC, Mobile, and all devices)
+  // Load and sync content: 1) IndexedDB auto-recovery -> 2) Cloud Firestore -> 3) Server
   useEffect(() => {
-    fetch('/api/content')
-      .then((res) => {
-        if (!res.ok) return null;
-        return res.json();
-      })
-      .then((data) => {
-        if (data) {
-          if (Array.isArray(data.projects) && data.projects.length > 0) {
-            setProjectsList(data.projects);
-            const currentHash = typeof window !== 'undefined' ? window.location.hash : '';
-            if (!currentHash.includes('more/') && activeProjectSlug !== '__closed__') {
-              setActiveProjectSlug(data.projects[0].slug);
-            }
-            try {
-              localStorage.setItem('leehyejun_custom_projects', JSON.stringify(data.projects));
-            } catch {}
-          }
-          if (data.about && typeof data.about === 'object') {
-            setAboutData(data.about);
-            try {
-              localStorage.setItem('leehyejun_custom_about', JSON.stringify(data.about));
-            } catch {}
-          }
-          if (data.resume && typeof data.resume === 'object') {
-            setResumeData(data.resume);
-            try {
-              localStorage.setItem('leehyejun_custom_resume', JSON.stringify(data.resume));
-            } catch {}
+    async function loadAllContent() {
+      let recoveredFromLocal = false;
+
+      // 1. AUTO-RECOVERY: Check if the user's browser has saved photos in IndexedDB from previous session
+      try {
+        const idbProjects = await idbGet<WorkProject[]>('leehyejun_custom_projects');
+        if (Array.isArray(idbProjects) && idbProjects.length > 0) {
+          const hasUploadedPhotos = idbProjects.some(
+            (p) => Boolean(p.thumbnail) || (Array.isArray(p.images) && p.images.length > 0)
+          );
+          if (hasUploadedPhotos) {
+            console.log('[Auto-Recovery] Found previous photos in browser IndexedDB! Restoring...');
+            setProjectsList(idbProjects);
+            recoveredFromLocal = true;
+            setRecoveryNotice(
+              '🎉 브라우저에 임시 저장되어 있던 사진과 프로젝트 데이터가 자동으로 복구되어 클라우드(Firestore)에 안전하게 영구 저장되었습니다!'
+            );
+            // Immediately sync up to Cloud Firestore & Server so it will NEVER be lost again
+            await savePortfolioToFirestore({ projects: idbProjects });
+            await syncToServer({ projects: idbProjects });
           }
         }
-      })
-      .catch((err) => console.warn('Could not sync with server:', err));
+      } catch (err) {
+        console.warn('[Auto-Recovery] IDB check:', err);
+      }
+
+      // 2. PRIMARY: Fetch from Google Cloud Firestore (permanent cloud database)
+      try {
+        const firestoreData = await fetchPortfolioFromFirestore();
+        if (
+          firestoreData &&
+          Array.isArray((firestoreData as any).projects) &&
+          (firestoreData as any).projects.length > 0
+        ) {
+          const fsProjects = (firestoreData as any).projects;
+          // If we didn't just recover richer local photos, apply Firestore data
+          if (!recoveredFromLocal) {
+            setProjectsList(fsProjects);
+            const currentHash = typeof window !== 'undefined' ? window.location.hash : '';
+            if (!currentHash.includes('more/') && activeProjectSlug !== '__closed__') {
+              setActiveProjectSlug(fsProjects[0]?.slug || null);
+            }
+          }
+          if ((firestoreData as any).about) setAboutData((firestoreData as any).about);
+          if ((firestoreData as any).resume) setResumeData((firestoreData as any).resume);
+
+          // Update local cache
+          idbSet('leehyejun_custom_projects', fsProjects).catch(() => {});
+          try {
+            localStorage.setItem('leehyejun_custom_projects', JSON.stringify(fsProjects));
+          } catch {}
+          return;
+        }
+      } catch (err) {
+        console.warn('[Firestore] Client fetch:', err);
+      }
+
+      // 3. FALLBACK: Fetch from /api/content
+      try {
+        const res = await fetch('/api/content');
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            if (!recoveredFromLocal && Array.isArray(data.projects) && data.projects.length > 0) {
+              setProjectsList(data.projects);
+              const currentHash = typeof window !== 'undefined' ? window.location.hash : '';
+              if (!currentHash.includes('more/') && activeProjectSlug !== '__closed__') {
+                setActiveProjectSlug(data.projects[0]?.slug || null);
+              }
+              try {
+                localStorage.setItem('leehyejun_custom_projects', JSON.stringify(data.projects));
+              } catch {}
+            }
+            if (data.about) setAboutData(data.about);
+            if (data.resume) setResumeData(data.resume);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not sync with server:', err);
+      }
+    }
+
+    loadAllContent();
   }, []);
 
   // Cleanly clear hash without leaving trailing #
@@ -169,6 +224,20 @@ export default function App() {
 
   return (
     <div className="min-h-screen lg:h-screen w-full bg-white text-black flex flex-col font-sans select-text lg:overflow-hidden">
+      {/* Auto-Recovery Success Notification Banner */}
+      {recoveryNotice && (
+        <div className="bg-neutral-900 text-white text-[12px] py-2 px-4 flex items-center justify-between shrink-0 z-50 shadow-md">
+          <span>{recoveryNotice}</span>
+          <button
+            type="button"
+            onClick={() => setRecoveryNotice(null)}
+            className="text-neutral-300 hover:text-white text-[11px] underline ml-4 cursor-pointer"
+          >
+            확인 (닫기)
+          </button>
+        </div>
+      )}
+
       {/* Mobile Top Navigation (only visible on mobile/tablet viewports) */}
       <header className="lg:hidden h-11 px-4 border-b border-[rgba(0,0,0,0.15)] flex items-center justify-between bg-white sticky top-0 z-30 shrink-0">
         <button

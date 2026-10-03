@@ -8,7 +8,9 @@ import {
   saveAboutData,
   getResumeData,
   saveResumeData,
+  syncToServer,
 } from '../lib/content';
+import { savePortfolioToFirestore } from '../lib/firebase';
 import { compressImageFile } from '../lib/imageCompressor';
 import {
   X,
@@ -150,12 +152,16 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
           }
           if (parsed.projects && Array.isArray(parsed.projects)) {
             parsed.projects.forEach((proj: WorkProject) => saveCustomProject(proj));
-            setProjectsList(getAllProjects());
-            if (parsed.projects[0]) {
-              onProjectAdded(parsed.projects[0]);
+            const all = getAllProjects();
+            setProjectsList(all);
+            if (all[0]) {
+              onProjectAdded(all[0]);
             }
           }
-          alert('데이터를 성공적으로 불러왔습니다! 이제 이 기기에서도 동일하게 표시됩니다.');
+          // Direct sync to Cloud Firestore & Server
+          savePortfolioToFirestore(parsed).catch(() => {});
+          syncToServer(parsed).catch(() => {});
+          alert('데이터를 성공적으로 불러왔습니다! 클라우드(Firestore)에 안전하게 영구 동기화되었습니다.');
         } catch {
           alert('올바르지 않은 백업 파일 형식입니다.');
         }
@@ -487,6 +493,35 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 >
                   <FileText size={11} />
                   <span>Resume</span>
+                </button>
+              </div>
+            )}
+            {isAuthenticated && (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="file"
+                  accept=".json"
+                  ref={importFileInputRef}
+                  onChange={handleImportData}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={handleExportData}
+                  className="text-[11px] border border-[rgba(0,0,0,0.2)] bg-neutral-50 hover:bg-neutral-100 text-black px-2 py-1 flex items-center gap-1 cursor-pointer transition-colors"
+                  title="전체 데이터 및 사진을 내 컴퓨터로 백업 다운로드"
+                >
+                  <Download size={11} />
+                  <span>백업 저장</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => importFileInputRef.current?.click()}
+                  className="text-[11px] border border-[rgba(0,0,0,0.2)] bg-neutral-50 hover:bg-neutral-100 text-black px-2 py-1 flex items-center gap-1 cursor-pointer transition-colors"
+                  title="내 컴퓨터의 백업 파일(JSON)에서 복원"
+                >
+                  <Upload size={11} />
+                  <span>백업 불러오기</span>
                 </button>
               </div>
             )}

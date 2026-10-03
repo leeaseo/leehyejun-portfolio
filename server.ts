@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fetchPortfolioFromFirestore, savePortfolioToFirestore } from './src/lib/firebase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,9 +18,19 @@ async function startServer() {
 
   const DATA_FILE = path.resolve(__dirname, 'src/content/custom-data.json');
 
-  // Read current shared content across all devices
-  app.get('/api/content', (req, res) => {
+  // Read current shared content across all devices (Cloud Firestore + Local Disk Fallback)
+  app.get('/api/content', async (req, res) => {
     try {
+      // 1. Try reading from Cloud Firestore (permanent cloud persistence)
+      const firestoreData = await fetchPortfolioFromFirestore();
+      if (firestoreData && Array.isArray((firestoreData as any).projects) && (firestoreData as any).projects.length > 0) {
+        try {
+          fs.writeFileSync(DATA_FILE, JSON.stringify(firestoreData, null, 2), 'utf-8');
+        } catch {}
+        return res.json(firestoreData);
+      }
+
+      // 2. Fallback to local custom-data.json
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf-8');
         return res.json(JSON.parse(raw));
@@ -32,7 +43,7 @@ async function startServer() {
   });
 
   // Save updated content (persists across PC, Mobile, and all visitors worldwide)
-  app.post('/api/publish', (req, res) => {
+  app.post('/api/publish', async (req, res) => {
     try {
       const payload = req.body;
       let current = { projects: [], about: {}, resume: {} };
@@ -48,8 +59,17 @@ async function startServer() {
         updatedAt: new Date().toISOString(),
       };
 
-      fs.writeFileSync(DATA_FILE, JSON.stringify(updated, null, 2), 'utf-8');
-      console.log('[Server] Successfully saved portfolio data to custom-data.json');
+      // 1. Save to local disk file
+      try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(updated, null, 2), 'utf-8');
+      } catch (e) {
+        console.warn('[Server] Could not write to disk:', e);
+      }
+
+      // 2. Save permanently to Google Cloud Firestore
+      await savePortfolioToFirestore(updated);
+
+      console.log('[Server] Successfully saved portfolio data to custom-data.json & Cloud Firestore');
       return res.json({ success: true, data: updated });
     } catch (err) {
       console.error('[Server] Failed to save content data:', err);
