@@ -111,7 +111,7 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
 
                           {/* Task bullets */}
                           {Array.isArray(exp?.tasks) && exp.tasks.length > 0 && (
-                            <ul className="pl-4 space-y-1 text-[13px] text-[rgba(0,0,0,0.75)] list-disc">
+                            <ul className="pl-4 space-y-1 text-[13px] text-[rgba(0,0,0,0.5)] list-disc">
                               {exp.tasks.map((task, tIdx) => (
                                 <li key={tIdx} className="leading-relaxed">
                                   {task}
@@ -151,11 +151,11 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                   <div className="text-[13px] font-bold text-black">
                     자격 및 능력
                   </div>
-                  <div className="space-y-1 text-[13px] text-black leading-relaxed">
+                  <div className="space-y-1 text-[13px] leading-relaxed">
                     {Array.isArray(resumeData.certifications) && resumeData.certifications.length > 0 && (
-                      <div>{resumeData.certifications.join(', ')}</div>
+                      <div className="text-black font-normal">{resumeData.certifications.join(', ')}</div>
                     )}
-                    <div className="text-black">
+                    <div className="text-black font-normal">
                       {(Array.isArray(resumeData?.skills) ? resumeData.skills : []).join(', ')}
                     </div>
                   </div>
