@@ -61,13 +61,15 @@ export async function fetchPortfolioFromFirestore(): Promise<{
 
 export async function savePortfolioToFirestore(data: {
   projects?: WorkProject[];
+  experiences?: WorkProject[];
   about?: any;
   resume?: any;
 }): Promise<boolean> {
   try {
     // 1. Save individual projects to /projects/{slug} collection (each doc gets its own 1MB budget!)
-    if (Array.isArray(data.projects) && data.projects.length > 0) {
-      for (const proj of data.projects) {
+    const allProjs = [...(data.projects || []), ...(data.experiences || [])];
+    if (allProjs.length > 0) {
+      for (const proj of allProjs) {
         if (!proj.slug) continue;
         const projRef = doc(db, 'projects', proj.slug);
         await setDoc(projRef, {

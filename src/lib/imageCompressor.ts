@@ -41,6 +41,11 @@ export async function compressImageFile(
           return;
         }
 
+        // Fill canvas with the warm gallery background (#FAF9F6) so transparent PNGs
+        // automatically blend with the site's background instead of turning black in JPEG conversion
+        ctx.fillStyle = '#FAF9F6';
+        ctx.fillRect(0, 0, width, height);
+
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);

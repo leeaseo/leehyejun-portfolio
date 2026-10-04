@@ -1,16 +1,23 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { WorkProject } from '../lib/types';
 import { VisualFrame } from './VisualFrame';
 import { MdxContent } from './MdxContent';
+import { compressImageFile } from '../lib/imageCompressor';
+import { saveExperienceProject, saveCustomProject, getAllProjects, getExperienceProjects, syncToServer } from '../lib/content';
+import { savePortfolioToFirestore } from '../lib/firebase';
+import { Upload, Plus, Loader2 } from 'lucide-react';
 
 interface MoreColumnProps {
   activeProject: WorkProject | null;
   onClearActiveProject: () => void;
+  onEditProject?: (project: WorkProject) => void;
+  onProjectUpdated?: (updatedProject: WorkProject) => void;
 }
 
 export const MoreColumn: React.FC<MoreColumnProps> = ({
   activeProject,
   onClearActiveProject,
+  onEditProject,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -21,8 +28,11 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
     }
   }, [activeProject?.slug]);
 
+  // Current active project to render - directly reactive to props
+  const project = activeProject;
+
   // If no project is selected
-  if (!activeProject) {
+  if (!project) {
     return (
       <div className="w-full flex flex-col bg-white">
         {/* Empty column top border matching About and Work */}
@@ -37,12 +47,70 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
   }
 
   // Has custom detail images uploaded by user?
-  const detailImages = activeProject.images && activeProject.images.length > 0 ? activeProject.images : [];
+  const detailImages = Array.isArray(project.images) ? project.images : [];
   const isExperience =
-    (activeProject.order && activeProject.order >= 100) ||
-    activeProject.slug.includes('poing') ||
-    activeProject.slug.includes('como') ||
-    activeProject.slug.includes('librat');
+    (project.order && project.order >= 100) ||
+    project.slug.includes('poing') ||
+    project.slug.includes('como') ||
+    project.slug.includes('librat') ||
+    project.slug.includes('convenset');
+
+  const hasPhotosPlaceholder = project.content.includes('[PHOTOS]');
+  const photosNode = (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-normal text-black">Photos</span>
+          {detailImages.length > 0 && (
+            <span className="text-[11px] text-[rgba(0,0,0,0.4)] font-mono">
+              ({detailImages.length})
+            </span>
+          )}
+        </div>
+        {onEditProject && (
+          <button
+            type="button"
+            onClick={() => onEditProject(project)}
+            className="text-[11.5px] text-neutral-600 hover:text-black font-normal cursor-pointer transition-colors underline"
+            title="이 프로젝트에 사진 추가/관리하기"
+          >
+            + 사진 추가/관리
+          </button>
+        )}
+      </div>
+
+      {/* Gallery list */}
+      {detailImages.length > 0 ? (
+        <div className="space-y-5">
+          {detailImages.map((imgSrc, idx) => (
+            <div key={idx} className="space-y-1.5">
+              <div className="border border-[rgba(0,0,0,0.08)] overflow-hidden bg-[#FAF9F6]">
+                <VisualFrame
+                  src={imgSrc}
+                  alt={`${project.title} Detail ${idx + 1}`}
+                  aspectRatio="auto"
+                  subtitle={`PHOTO ${String(idx + 1).padStart(2, '0')}`}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-[12px] text-[rgba(0,0,0,0.4)] py-4 font-normal flex items-center justify-between">
+          <span>등록된 세부 사진이 없습니다.</span>
+          {onEditProject && (
+            <button
+              type="button"
+              onClick={() => onEditProject(project)}
+              className="text-[11.5px] text-black underline cursor-pointer"
+            >
+              + 사진 등록하기
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div ref={scrollContainerRef} className="w-full flex flex-col bg-white">
@@ -52,90 +120,114 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
           <span className="text-[13px] text-black font-normal">More</span>
           {isExperience && (
             <span className="text-[11px] px-1.5 py-0.2 bg-neutral-100 text-neutral-600 rounded font-mono">
-              Experience Archive
+              Resume
             </span>
           )}
         </div>
-        <button
-          onClick={onClearActiveProject}
-          className="text-[12px] text-[rgba(0,0,0,0.4)] hover:text-black font-normal cursor-pointer"
-          title="Close details"
-        >
-          [Close]
-        </button>
+        <div className="flex items-center gap-3">
+          {onEditProject && (
+            <button
+              type="button"
+              onClick={() => onEditProject(project)}
+              className="text-[12px] text-neutral-600 hover:text-black font-normal cursor-pointer transition-colors"
+              title="이 프로젝트의 사진 추가 및 내용 수정하기"
+            >
+              [사진 추가 / 편집]
+            </button>
+          )}
+          <button
+            onClick={onClearActiveProject}
+            className="text-[12px] text-[rgba(0,0,0,0.4)] hover:text-black font-normal cursor-pointer transition-colors"
+            title="Close details"
+          >
+            [Close]
+          </button>
+        </div>
       </div>
 
-      {/* Main Project Content Body (2-column layout matching image) */}
+      {/* Main Project Content Body */}
       <div className="p-4 sm:p-6 space-y-8">
-        {/* Top 2-Column Info: 좌측 프로젝트명(font-size: 15px), 우측 스펙 및 본문 설명 */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 text-[13px] leading-relaxed font-normal">
-          {/* Left Column: Title (CSS selector 8: font-size: 15px) */}
-          <div className="md:col-span-4 space-y-1">
-            {isExperience && (
-              <div className="text-[11px] font-mono text-[rgba(0,0,0,0.45)] uppercase tracking-wider">
-                Resume / Deep-Dive
-              </div>
-            )}
-            <h2
-              className="text-[15px] font-normal text-black tracking-normal leading-snug"
-              style={{ fontSize: '15px' }}
-            >
-              {activeProject.title}
-            </h2>
+        {isExperience ? (
+          /* Full-Width Layout for Resume Deep-Dives: 왼쪽 제목 및 상단 중복 스펙 제거 후 꽉 차게 배치 */
+          <div className="w-full space-y-6 text-[13px] font-normal text-black leading-relaxed">
+            <MdxContent content={project.content} photosSlot={photosNode} />
           </div>
-
-          {/* Right Column: Specs + Narrative Prose */}
-          <div className="md:col-span-8 space-y-4 text-[13px] font-normal text-black">
-            {/* Specs Block (CSS selectors 9 & 10: font-style: normal) */}
-            <div className="space-y-0.5 pb-2">
-              <div
-                className="text-black font-normal not-italic"
-                style={{ fontStyle: 'normal' }}
+        ) : (
+          /* Standard 2-Column Info for Work projects */
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 text-[13px] leading-relaxed font-normal">
+            {/* Left Column: Title */}
+            <div className="md:col-span-4 space-y-1">
+              <h2
+                className="text-[15px] font-normal text-black tracking-normal leading-snug"
+                style={{ fontSize: '15px' }}
               >
-                {activeProject.materials}
-              </div>
-              <div className="text-black font-normal">
-                {activeProject.dimensions}
-              </div>
-              <div
-                className="text-black font-normal not-italic"
-                style={{ fontStyle: 'normal' }}
-              >
-                {activeProject.date}
-              </div>
+                {project.title}
+              </h2>
             </div>
 
-            {/* Narrative text (13px font-normal) */}
-            <div className="space-y-4 text-[13px] font-normal leading-[1.65] text-black">
-              <MdxContent content={activeProject.content} />
-            </div>
-          </div>
-        </div>
-
-        {/* Photos Heading */}
-        <div className="pt-2 border-t border-[rgba(0,0,0,0.08)]">
-          <div className="text-[13px] font-normal text-black mb-4">Photos</div>
-
-          {/* Photos Gallery: Renders detail images uploaded in Admin, or architectural graphics */}
-          <div className="space-y-5">
-            {detailImages.length > 0 ? (
-              detailImages.map((imgSrc, idx) => (
-                <div key={idx} className="border border-[rgba(0,0,0,0.08)] overflow-hidden bg-white">
-                  <VisualFrame
-                    src={imgSrc}
-                    alt={`${activeProject.title} Detail ${idx + 1}`}
-                    aspectRatio="auto"
-                    subtitle={`DETAIL PHOTO ${String(idx + 1).padStart(2, '0')}`}
-                  />
+            {/* Right Column: Specs + Narrative Prose */}
+            <div className="md:col-span-8 space-y-4 text-[13px] font-normal text-black">
+              {/* Specs Block */}
+              {(project.materials || project.dimensions || project.date || project.externalUrl) && (
+                <div className="space-y-0.5 pb-2">
+                  {project.materials && (
+                    <div className="text-black font-normal not-italic">{project.materials}</div>
+                  )}
+                  {project.dimensions && (
+                    <div className="text-black font-normal">{project.dimensions}</div>
+                  )}
+                  {project.date && (
+                    <div className="text-black font-normal not-italic">{project.date}</div>
+                  )}
+                  {project.externalUrl && (
+                    <div className="pt-1.5">
+                      <a
+                        href={project.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[12px] text-black underline underline-offset-2 hover:opacity-75 transition-opacity"
+                      >
+                        <span>공식 웹사이트 / 수상 전시 링크 ↗</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
-              ))
-            ) : (
-              <div className="text-[12px] text-[rgba(0,0,0,0.4)] py-3 font-normal">
-                등록된 세부 사진이 없습니다.
+              )}
+
+              {/* Narrative text */}
+              <div className="space-y-4 text-[13px] font-normal leading-[1.65] text-black">
+                <MdxContent content={project.content} photosSlot={photosNode} />
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Bottom Photos Heading (only if not already embedded via [PHOTOS]) */}
+        {!hasPhotosPlaceholder && (
+          <div className="pt-2 border-t border-[rgba(0,0,0,0.08)]">
+            <div className="text-[13px] font-normal text-black mb-4">Photos</div>
+
+            {/* Photos Gallery */}
+            <div className="space-y-5">
+              {detailImages.length > 0 ? (
+                detailImages.map((imgSrc, idx) => (
+                  <div key={idx} className="border border-[rgba(0,0,0,0.08)] overflow-hidden bg-[#FAF9F6]">
+                    <VisualFrame
+                      src={imgSrc}
+                      alt={`${project.title} Detail ${idx + 1}`}
+                      aspectRatio="auto"
+                      subtitle={`PHOTO ${String(idx + 1).padStart(2, '0')}`}
+                    />
+                  </div>
+                ))
+              ) : (
+                <div className="text-[12px] text-[rgba(0,0,0,0.4)] py-3 font-normal">
+                  등록된 세부 사진이 없습니다.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -173,7 +173,12 @@ export function getAboutData(): AboutData {
   return aboutJson as AboutData;
 }
 
-export async function syncToServer(data: { projects?: WorkProject[]; about?: AboutData; resume?: ResumeData }): Promise<void> {
+export async function syncToServer(data: {
+  projects?: WorkProject[];
+  experiences?: WorkProject[];
+  about?: AboutData;
+  resume?: ResumeData;
+}): Promise<void> {
   if (typeof window === 'undefined') return;
   // 1. Direct save to Google Cloud Firestore from client
   try {
@@ -203,6 +208,12 @@ export function saveAboutData(data: AboutData): void {
 }
 
 export function getResumeData(): ResumeData {
+  const defaultHonors = (customDataJson as any)?.resume?.honors || resumeJson.honors || [
+    { title: "Poing — ASIA DESIGN PRIZE 2021 'GOLD WINNER'", period: "2021년" },
+    { title: "Librat — MIICON 콘크리트 가구 공모전 '장려상'", period: "2019년" },
+    { title: "Como Desk — 고지베리 목공방 개인프로젝트", period: "2020-21년" }
+  ];
+
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_resume') : null;
     if (raw) {
@@ -213,7 +224,7 @@ export function getResumeData(): ResumeData {
             (parsed.totalExperience === '총 5년 11개월' ? '총 6년 2개월' : parsed.totalExperience) ||
             ((customDataJson as any)?.resume?.totalExperience || (resumeJson as any).totalExperience || '총 6년 2개월'),
           education: Array.isArray(parsed.education) ? parsed.education : ((customDataJson as any)?.resume?.education || resumeJson.education || []),
-          honors: Array.isArray(parsed.honors) ? parsed.honors : ((customDataJson as any)?.resume?.honors || resumeJson.honors || []),
+          honors: defaultHonors,
           skills: Array.isArray(parsed.skills) ? parsed.skills : ((customDataJson as any)?.resume?.skills || resumeJson.skills || []),
           certifications: Array.isArray(parsed.certifications) ? parsed.certifications : ((customDataJson as any)?.resume?.certifications || resumeJson.certifications || []),
           experience: Array.isArray(parsed.experience) ? parsed.experience : ((customDataJson as any)?.resume?.experience || resumeJson.experience || []),
@@ -225,9 +236,15 @@ export function getResumeData(): ResumeData {
     // fallback
   }
   if ((customDataJson as any)?.resume) {
-    return (customDataJson as any).resume as ResumeData;
+    return {
+      ...((customDataJson as any).resume as ResumeData),
+      honors: defaultHonors,
+    };
   }
-  return resumeJson as ResumeData;
+  return {
+    ...(resumeJson as ResumeData),
+    honors: defaultHonors,
+  };
 }
 
 export function saveResumeData(data: ResumeData): void {
@@ -239,29 +256,44 @@ export function saveResumeData(data: ResumeData): void {
   syncToServer({ resume: data });
 }
 
+export function isExperienceSlug(slug?: string): boolean {
+  if (!slug) return false;
+  const s = slug.toLowerCase();
+  return (
+    s.includes('poing') ||
+    s.includes('como-desk') ||
+    s.includes('como_desk') ||
+    s.includes('librat') ||
+    s.includes('convenset')
+  );
+}
+
 export function getCustomProjects(): WorkProject[] {
+  let list: WorkProject[] = [];
   // 1. Check in-memory cache first (preserves original high-res photos)
   if (memoryCustomProjects && memoryCustomProjects.length > 0) {
-    return memoryCustomProjects;
-  }
-
-  // 2. Check localStorage
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_projects') : null;
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        memoryCustomProjects = parsed;
-        return parsed;
+    list = memoryCustomProjects;
+  } else {
+    // 2. Check localStorage
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_projects') : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          memoryCustomProjects = parsed;
+          list = parsed;
+        }
       }
-    }
-  } catch {}
+    } catch {}
 
-  // 3. Fallback to bundled custom-data.json
-  if ((customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects)) {
-    return (customDataJson as any).projects;
+    // 3. Fallback to bundled custom-data.json
+    if (list.length === 0 && (customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects)) {
+      list = (customDataJson as any).projects;
+    }
   }
-  return [];
+
+  // Strictly filter out any experience projects (order >= 100 or experience slugs)
+  return list.filter((p) => p && !isExperienceSlug(p.slug) && (!p.order || p.order < 100));
 }
 
 export function saveCustomProject(project: WorkProject, originalSlug?: string): void {
@@ -364,7 +396,7 @@ export function getAllProjects(): WorkProject[] {
   }
 
   return projects
-    .filter((p): p is WorkProject => Boolean(p && p.slug))
+    .filter((p): p is WorkProject => Boolean(p && p.slug && !isExperienceSlug(p.slug) && (!p.order || p.order < 100)))
     .sort((a, b) => (a.order || 99) - (b.order || 99));
 }
 
@@ -372,30 +404,71 @@ export function getExperienceProjects(): WorkProject[] {
   let list = [...DEFAULT_EXPERIENCE_PROJECTS];
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_experiences') : null;
+    let parsed: any[] | null = null;
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        list = list.map((exp) => {
-          const match = parsed.find((p: any) => p && p.slug === exp.slug);
-          return match ? { ...exp, ...match } : exp;
-        });
-      }
+      try {
+        parsed = JSON.parse(raw);
+      } catch {}
     }
-  } catch {
-    // fallback
+
+    // Merge both customDataJson.experiences and customDataJson.projects to guarantee photos are never missed
+    const allCustom = [
+      ...((customDataJson as any)?.experiences || []),
+      ...((customDataJson as any)?.projects || []),
+    ];
+
+    list = list.map((exp) => {
+      const fromLocal = parsed?.find((p: any) => p && p.slug === exp.slug);
+      const fromCustom = allCustom.find((p: any) => p && p.slug === exp.slug);
+      const match = fromLocal || fromCustom;
+      if (!match) return exp;
+
+      const localImages = Array.isArray(fromLocal?.images) ? fromLocal.images : [];
+      const customImages = Array.isArray(fromCustom?.images) ? fromCustom.images : [];
+      const resolvedImages =
+        localImages.length > 0
+          ? localImages
+          : customImages.length > 0
+          ? customImages
+          : exp.images;
+
+      return {
+        ...exp,
+        title: exp.title,
+        date: exp.date,
+        materials: exp.materials,
+        dimensions: exp.dimensions,
+        content: exp.content,
+        images: resolvedImages,
+        thumbnail: match.thumbnail || resolvedImages[0] || exp.thumbnail,
+        externalUrl: match.externalUrl || exp.externalUrl,
+      };
+    });
+  } catch (err) {
+    console.warn('getExperienceProjects error:', err);
   }
   return list;
 }
 
 export function saveExperienceProject(project: WorkProject): void {
   const current = getExperienceProjects();
-  const updated = current.map((p) => (p.slug === project.slug ? project : p));
+  let found = false;
+  const updated = current.map((p) => {
+    if (p.slug === project.slug) {
+      found = true;
+      return project;
+    }
+    return p;
+  });
+  if (!found) {
+    updated.push(project);
+  }
   try {
     localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(updated));
   } catch (err) {
     console.warn('LocalStorage error on experience project save:', err);
   }
-  syncToServer({ projects: [...getAllProjects(), ...updated] });
+  syncToServer({ experiences: updated });
 }
 
 export function getProjectBySlug(slug: string): WorkProject | undefined {

@@ -194,7 +194,7 @@ export const VisualFrame: React.FC<VisualFrameProps> = ({
           src={src}
           alt={alt}
           onError={() => setHasError(true)}
-          className="w-full h-auto block object-contain transition-transform duration-300 group-hover:scale-[1.005]"
+          className="w-full h-auto block object-contain transition-transform duration-300 group-hover:scale-[1.005] bg-[#FAF9F6]"
           referrerPolicy="no-referrer"
           loading="lazy"
         />
@@ -203,12 +203,12 @@ export const VisualFrame: React.FC<VisualFrameProps> = ({
   }
 
   return (
-    <div className={`relative w-full overflow-hidden bg-[#F5F5F3] ${aspectClass} ${className}`}>
+    <div className={`relative w-full overflow-hidden bg-[#FAF9F6] ${aspectClass} ${className}`}>
       <img
         src={src}
         alt={alt}
         onError={() => setHasError(true)}
-        className={`absolute inset-0 w-full h-full ${objectFit === 'cover' ? 'object-cover' : 'object-contain'} transition-transform duration-300 group-hover:scale-[1.01]`}
+        className={`absolute inset-0 w-full h-full ${objectFit === 'cover' ? 'object-cover' : 'object-contain'} transition-transform duration-300 group-hover:scale-[1.01] bg-[#FAF9F6]`}
         referrerPolicy="no-referrer"
       />
     </div>

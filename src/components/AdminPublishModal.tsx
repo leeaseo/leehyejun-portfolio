@@ -43,6 +43,7 @@ interface AdminPublishModalProps {
   onResumeUpdated: (newResume: ResumeData) => void;
   isAuthenticated?: boolean;
   onAuthenticatedChange?: (authed: boolean) => void;
+  initialEditingProject?: WorkProject | null;
 }
 
 export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
@@ -52,6 +53,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   onResumeUpdated,
   isAuthenticated: propIsAuthenticated,
   onAuthenticatedChange,
+  initialEditingProject,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     if (propIsAuthenticated !== undefined) return propIsAuthenticated;
@@ -71,16 +73,20 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     }
   }, [propIsAuthenticated]);
 
-  // Auto-select first project (#1) on open so the user is immediately editing #1
+  // Auto-select first project (#1) or specified project on open
   React.useEffect(() => {
     if (isAuthenticated) {
       const list = getAllProjects();
       setProjectsList(list);
-      if (!editingSlug && list.length > 0) {
+      if (initialEditingProject) {
+        setMainSection('work');
+        setWorkTab('editor');
+        handleSelectProjectToEdit(initialEditingProject);
+      } else if (!editingSlug && list.length > 0) {
         handleSelectProjectToEdit(list[0]);
       }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, initialEditingProject]);
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -441,9 +447,17 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
 
     setIsSaved(true);
 
-    // Save directly to Google Cloud Firestore permanently!
+    // Sync to local server file & Firestore immediately
+    syncToServer({
+      projects: getAllProjects(),
+      experiences: getExperienceProjects(),
+      about: getAboutData(),
+      resume: getResumeData(),
+    });
+
     savePortfolioToFirestore({
       projects: getAllProjects(),
+      experiences: getExperienceProjects(),
       about: getAboutData(),
       resume: getResumeData(),
     }).catch((err) => console.error('[Firestore] Save error:', err));
@@ -1079,43 +1093,74 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
             /* ============================================================== */
             <form onSubmit={handlePublishWork} className="space-y-4">
               {/* Quick Project Slot Selector Bar */}
-              <div className="space-y-1.5 pb-2 border-b border-[rgba(0,0,0,0.1)]">
+              <div className="space-y-2 pb-2.5 border-b border-[rgba(0,0,0,0.1)]">
                 <div className="flex items-center justify-between text-[11px] text-[rgba(0,0,0,0.5)]">
-                  <span>수정할 프로젝트 슬롯 선택 (순서 고정):</span>
-                  <span className="text-[11px] text-neutral-500 font-mono">제목을 바꿔도 #{order}번 순서는 안전하게 유지됩니다</span>
+                  <span>수정할 프로젝트 선택:</span>
+                  <span className="text-[11px] text-neutral-500 font-mono">Work 및 Resume 경험 프로젝트를 선택하여 사진과 내용을 관리할 수 있습니다</span>
                 </div>
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                  {projectsList.map((p) => {
-                    const isSelected = editingSlug === p.slug;
-                    return (
-                      <button
-                        key={p.slug}
-                        type="button"
-                        onClick={() => handleSelectProjectToEdit(p)}
-                        className={`px-3 py-1.5 text-[12px] border transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                          isSelected
-                            ? 'bg-black text-white border-black font-medium'
-                            : 'bg-white text-black border-[rgba(0,0,0,0.2)] hover:border-black'
-                        }`}
-                      >
-                        <span className={`font-mono ${isSelected ? 'text-neutral-300' : 'text-[rgba(0,0,0,0.45)]'}`}>
-                          #{p.order}
-                        </span>
-                        <span className="max-w-[130px] truncate">{p.title || 'Untitled'}</span>
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={handleNewProject}
-                    className={`px-3 py-1.5 text-[12px] border border-dashed transition-colors cursor-pointer shrink-0 ${
-                      !editingSlug
-                        ? 'bg-black text-white border-black font-medium'
-                        : 'bg-neutral-50 text-[rgba(0,0,0,0.6)] border-[rgba(0,0,0,0.3)] hover:text-black hover:border-black'
-                    }`}
-                  >
-                    + 새 프로젝트 추가
-                  </button>
+                
+                {/* 1. Work Projects Row */}
+                <div className="space-y-1">
+                  <div className="text-[10.5px] font-bold text-neutral-600 uppercase tracking-wider">Work 프로젝트</div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    {projectsList.map((p) => {
+                      const isSelected = editingSlug === p.slug;
+                      return (
+                        <button
+                          key={p.slug}
+                          type="button"
+                          onClick={() => handleSelectProjectToEdit(p)}
+                          className={`px-3 py-1.5 text-[12px] border transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-black text-white border-black font-medium'
+                              : 'bg-white text-black border-[rgba(0,0,0,0.2)] hover:border-black'
+                          }`}
+                        >
+                          <span className={`font-mono ${isSelected ? 'text-neutral-300' : 'text-[rgba(0,0,0,0.45)]'}`}>
+                            #{p.order}
+                          </span>
+                          <span className="max-w-[130px] truncate">{p.title || 'Untitled'}</span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={handleNewProject}
+                      className={`px-3 py-1.5 text-[12px] border border-dashed transition-colors cursor-pointer shrink-0 ${
+                        !editingSlug
+                          ? 'bg-black text-white border-black font-medium'
+                          : 'bg-neutral-50 text-[rgba(0,0,0,0.6)] border-[rgba(0,0,0,0.3)] hover:text-black hover:border-black'
+                      }`}
+                    >
+                      + 새 프로젝트 추가
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Experience Projects Row */}
+                <div className="space-y-1 pt-1">
+                  <div className="text-[10.5px] font-bold text-neutral-600 uppercase tracking-wider">Resume 경험 프로젝트 (More 사진 관리)</div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    {getExperienceProjects().map((exp) => {
+                      const isSelected = editingSlug === exp.slug;
+                      return (
+                        <button
+                          key={exp.slug}
+                          type="button"
+                          onClick={() => handleSelectProjectToEdit(exp)}
+                          className={`px-3 py-1.5 text-[12px] border transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-neutral-900 text-white border-neutral-900 font-medium'
+                              : 'bg-neutral-50 text-black border-[rgba(0,0,0,0.2)] hover:border-black'
+                          }`}
+                        >
+                          <span className="text-[10.5px] px-1 bg-neutral-200 text-neutral-800 rounded font-mono">경험</span>
+                          <span className="max-w-[150px] truncate">{exp.title || 'Untitled'}</span>
+                          <span className="text-[11px] opacity-60 font-mono">({(exp.images || []).length}장)</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

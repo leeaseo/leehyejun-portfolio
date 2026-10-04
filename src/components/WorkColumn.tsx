@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { WorkProject } from '../lib/types';
 import { VisualFrame } from './VisualFrame';
+import { isExperienceSlug } from '../lib/content';
 
 interface WorkColumnProps {
   projects: WorkProject[];
@@ -14,6 +15,11 @@ export const WorkColumn: React.FC<WorkColumnProps> = ({
   onSelectProject,
 }) => {
   const [isIndexOpen, setIsIndexOpen] = useState(false);
+
+  // Strictly filter Work projects only (order < 100 and no experience projects)
+  const workProjects = (projects || []).filter(
+    (p) => Boolean(p && p.slug && !isExperienceSlug(p.slug) && (!p.order || p.order < 100))
+  );
 
   return (
     <div className="w-full flex flex-col bg-white">
@@ -36,7 +42,7 @@ export const WorkColumn: React.FC<WorkColumnProps> = ({
       {isIndexOpen && (
         <div className="bg-white border-b border-[rgba(0,0,0,0.15)] px-4 sm:px-6 py-3 sticky top-9 z-10 animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="divide-y divide-[rgba(0,0,0,0.06)]">
-            {(projects || []).filter(Boolean).map((project, index) => {
+            {workProjects.map((project, index) => {
               const formattedIndex = String(project.order || index + 1).padStart(2, '0');
               const isActive = activeSlug === project.slug;
 
@@ -74,7 +80,7 @@ export const WorkColumn: React.FC<WorkColumnProps> = ({
 
       {/* Projects Feed */}
       <div className="divide-y divide-[rgba(0,0,0,0.15)]">
-        {(projects || []).filter(Boolean).map((project, index) => {
+        {workProjects.map((project, index) => {
           const formattedIndex = String(project.order || index + 1).padStart(2, '0');
           const isActive = activeSlug === project.slug;
 

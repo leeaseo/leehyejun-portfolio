@@ -3,28 +3,52 @@ import React from 'react';
 interface MdxContentProps {
   content: string;
   className?: string;
+  photosSlot?: React.ReactNode;
 }
 
-export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '' }) => {
+interface ParsedListItem {
+  title: string;
+  body: string[];
+}
+
+export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '', photosSlot }) => {
   // Parse paragraphs and basic markdown constructs
   const lines = content.split(/\r?\n/);
   const elements: React.ReactNode[] = [];
   let inList = false;
-  let listItems: React.ReactNode[] = [];
+  let listItems: ParsedListItem[] = [];
   let isOrderedList = false;
 
   const flushList = (keyPrefix: number) => {
     if (inList && listItems.length > 0) {
       if (isOrderedList) {
         elements.push(
-          <ol key={`ol-${keyPrefix}`} className="list-decimal pl-5 my-4 space-y-1.5 text-[13px] leading-relaxed text-black">
-            {listItems}
+          <ol key={`ol-${keyPrefix}`} className="list-decimal pl-5 my-4 space-y-4 text-[13px] leading-relaxed text-black">
+            {listItems.map((item, idx) => (
+              <li key={idx} className="leading-relaxed pl-1">
+                <div className="font-semibold text-black">{parseInline(item.title)}</div>
+                {item.body.length > 0 && (
+                  <div className="text-[13px] text-black leading-relaxed mt-1">
+                    {parseInline(item.body.join(' '))}
+                  </div>
+                )}
+              </li>
+            ))}
           </ol>
         );
       } else {
         elements.push(
-          <ul key={`ul-${keyPrefix}`} className="list-disc pl-5 my-4 space-y-1.5 text-[13px] leading-relaxed text-black">
-            {listItems}
+          <ul key={`ul-${keyPrefix}`} className="list-disc pl-5 my-3 space-y-1.5 text-[13px] leading-relaxed text-black">
+            {listItems.map((item, idx) => (
+              <li key={idx} className="leading-relaxed pl-1">
+                <div>{parseInline(item.title)}</div>
+                {item.body.length > 0 && (
+                  <div className="text-[13px] text-black leading-relaxed mt-0.5">
+                    {parseInline(item.body.join(' '))}
+                  </div>
+                )}
+              </li>
+            ))}
           </ul>
         );
       }
@@ -105,7 +129,55 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '' 
     const trimmed = line.trim();
 
     if (!trimmed) {
+      if (inList) {
+        let nextNonEmpty = '';
+        for (let j = index + 1; j < lines.length; j++) {
+          if (lines[j].trim()) {
+            nextNonEmpty = lines[j];
+            break;
+          }
+        }
+        if (
+          nextNonEmpty &&
+          (nextNonEmpty.startsWith('  ') ||
+           nextNonEmpty.startsWith('\t') ||
+           (isOrderedList && /^\s*\d+\.\s+/.test(nextNonEmpty)) ||
+           (!isOrderedList && /^\s*[-*]\s+/.test(nextNonEmpty)))
+        ) {
+          return;
+        }
+      }
       flushList(index);
+      return;
+    }
+
+    // Indented continuation line under an existing list item
+    if (inList && listItems.length > 0 && (line.startsWith('  ') || line.startsWith('\t'))) {
+      listItems[listItems.length - 1].body.push(trimmed);
+      return;
+    }
+
+    // Photos slot placeholder
+    if (trimmed === '[PHOTOS]') {
+      flushList(index);
+      if (photosSlot) {
+        elements.push(
+          <div key={`photos-${index}`} className="my-6">
+            {photosSlot}
+          </div>
+        );
+      }
+      return;
+    }
+
+    // Blockquote
+    if (trimmed.startsWith('> ') || trimmed === '>') {
+      flushList(index);
+      elements.push(
+        <div key={index} className="border-l border-[rgba(0,0,0,0.25)] pl-3 py-0.5 my-1.5 text-[12.5px] text-[rgba(0,0,0,0.7)] leading-relaxed">
+          {parseInline(trimmed.replace(/^>\s*/, ''))}
+        </div>
+      );
       return;
     }
 
@@ -124,7 +196,7 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '' 
     if (trimmed.startsWith('## ')) {
       flushList(index);
       elements.push(
-        <h2 key={index} className="text-xl sm:text-2xl font-bold tracking-tight text-black mt-7 mb-3 border-b border-[rgba(0,0,0,0.1)] pb-2">
+        <h2 key={index} className="text-xl sm:text-2xl font-bold tracking-tight text-black mt-7 mb-3">
           {parseInline(trimmed.replace(/^##\s+/, ''))}
         </h2>
       );
@@ -149,11 +221,10 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '' 
         inList = true;
         isOrderedList = false;
       }
-      listItems.push(
-        <li key={`li-${index}`} className="leading-relaxed">
-          {parseInline(trimmed.replace(/^[-*]\s+/, ''))}
-        </li>
-      );
+      listItems.push({
+        title: trimmed.replace(/^[-*]\s+/, ''),
+        body: [],
+      });
       return;
     }
 
@@ -165,11 +236,10 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '' 
         inList = true;
         isOrderedList = true;
       }
-      listItems.push(
-        <li key={`li-${index}`} className="leading-relaxed">
-          {parseInline(orderedMatch[2])}
-        </li>
-      );
+      listItems.push({
+        title: orderedMatch[2],
+        body: [],
+      });
       return;
     }
 

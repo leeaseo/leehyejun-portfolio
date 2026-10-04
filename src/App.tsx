@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AboutResumeColumn } from './components/AboutResumeColumn';
 import { WorkColumn } from './components/WorkColumn';
 import { MoreColumn } from './components/MoreColumn';
@@ -7,7 +7,9 @@ import {
   getAboutData,
   getResumeData,
   getAllProjects,
+  getExperienceProjects,
   getProjectBySlug,
+  isExperienceSlug,
   syncToServer,
 } from './lib/content';
 import { WorkProject, AboutData, ResumeData } from './lib/types';
@@ -21,6 +23,7 @@ export default function App() {
   const [aboutData, setAboutData] = useState<AboutData>(getAboutData);
   const [resumeData, setResumeData] = useState<ResumeData>(getResumeData);
   const [projectsList, setProjectsList] = useState<WorkProject[]>(getAllProjects);
+  const [experienceProjectsList, setExperienceProjectsList] = useState<WorkProject[]>(getExperienceProjects);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -33,6 +36,7 @@ export default function App() {
       return false;
     }
   });
+  const [editingProjectForAdmin, setEditingProjectForAdmin] = useState<WorkProject | null>(null);
 
   // Default to first project (top of Work column, e.g. 01. 하)
   const [activeProjectSlug, setActiveProjectSlug] = useState<string | null>(() => {
@@ -43,35 +47,38 @@ export default function App() {
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('work');
 
-  // Load and sync content: 1) IndexedDB auto-recovery -> 2) Cloud Firestore -> 3) Server
+  // Load and sync content: 1) Server Content (Instant & Latest) -> 2) Cloud Firestore -> 3) Local Cache Fallback
   useEffect(() => {
     async function loadAllContent() {
-      let recoveredFromLocal = false;
-
-      // 1. AUTO-RECOVERY: Check if the user's browser has saved photos in IndexedDB from previous session
+      // 1. PRIMARY: Fetch latest verified server data (Instant, accurate, with all latest titles and images)
       try {
-        const idbProjects = await idbGet<WorkProject[]>('leehyejun_custom_projects');
-        if (Array.isArray(idbProjects) && idbProjects.length > 0) {
-          const hasUploadedPhotos = idbProjects.some(
-            (p) => Boolean(p.thumbnail) || (Array.isArray(p.images) && p.images.length > 0)
-          );
-          if (hasUploadedPhotos) {
-            console.log('[Auto-Recovery] Found previous photos in browser IndexedDB! Restoring...');
-            setProjectsList(idbProjects);
-            recoveredFromLocal = true;
-            setRecoveryNotice(
-              '🎉 브라우저에 임시 저장되어 있던 사진과 프로젝트 데이터가 자동으로 복구되어 클라우드(Firestore)에 안전하게 영구 저장되었습니다!'
-            );
-            // Immediately sync up to Cloud Firestore & Server so it will NEVER be lost again
-            await savePortfolioToFirestore({ projects: idbProjects });
-            await syncToServer({ projects: idbProjects });
+        const res = await fetch('/api/content');
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            if (Array.isArray(data.projects) && data.projects.length > 0) {
+              setProjectsList(data.projects);
+              idbSet('leehyejun_custom_projects', data.projects).catch(() => {});
+              try {
+                localStorage.setItem('leehyejun_custom_projects', JSON.stringify(data.projects));
+              } catch {}
+            }
+            if (Array.isArray(data.experiences) && data.experiences.length > 0) {
+              setExperienceProjectsList(data.experiences);
+              try {
+                localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(data.experiences));
+              } catch {}
+            }
+            if (data.about) setAboutData(data.about);
+            if (data.resume) setResumeData(data.resume);
+            return;
           }
         }
       } catch (err) {
-        console.warn('[Auto-Recovery] IDB check:', err);
+        console.warn('[Server] Could not sync with /api/content:', err);
       }
 
-      // 2. PRIMARY: Fetch from Google Cloud Firestore (permanent cloud database)
+      // 2. SECONDARY: Fetch from Google Cloud Firestore
       try {
         const firestoreData = await fetchPortfolioFromFirestore();
         if (
@@ -80,21 +87,23 @@ export default function App() {
           (firestoreData as any).projects.length > 0
         ) {
           const fsProjects = (firestoreData as any).projects;
-          // If we didn't just recover richer local photos, apply Firestore data
-          if (!recoveredFromLocal) {
-            setProjectsList(fsProjects);
-            const currentHash = typeof window !== 'undefined' ? window.location.hash : '';
-            if (!currentHash.includes('more/') && activeProjectSlug !== '__closed__') {
-              setActiveProjectSlug(fsProjects[0]?.slug || null);
-            }
+          const workProjs = fsProjects.filter((p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100));
+          const expProjs = fsProjects.filter((p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100));
+
+          setProjectsList(workProjs);
+          if (expProjs.length > 0) {
+            setExperienceProjectsList(expProjs);
+            try {
+              localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(expProjs));
+            } catch {}
           }
+
           if ((firestoreData as any).about) setAboutData((firestoreData as any).about);
           if ((firestoreData as any).resume) setResumeData((firestoreData as any).resume);
 
-          // Update local cache
-          idbSet('leehyejun_custom_projects', fsProjects).catch(() => {});
+          idbSet('leehyejun_custom_projects', workProjs).catch(() => {});
           try {
-            localStorage.setItem('leehyejun_custom_projects', JSON.stringify(fsProjects));
+            localStorage.setItem('leehyejun_custom_projects', JSON.stringify(workProjs));
           } catch {}
           return;
         }
@@ -102,28 +111,14 @@ export default function App() {
         console.warn('[Firestore] Client fetch:', err);
       }
 
-      // 3. FALLBACK: Fetch from /api/content
+      // 3. FALLBACK: Check if the user's browser has saved photos in IndexedDB from previous session
       try {
-        const res = await fetch('/api/content');
-        if (res.ok) {
-          const data = await res.json();
-          if (data) {
-            if (!recoveredFromLocal && Array.isArray(data.projects) && data.projects.length > 0) {
-              setProjectsList(data.projects);
-              const currentHash = typeof window !== 'undefined' ? window.location.hash : '';
-              if (!currentHash.includes('more/') && activeProjectSlug !== '__closed__') {
-                setActiveProjectSlug(data.projects[0]?.slug || null);
-              }
-              try {
-                localStorage.setItem('leehyejun_custom_projects', JSON.stringify(data.projects));
-              } catch {}
-            }
-            if (data.about) setAboutData(data.about);
-            if (data.resume) setResumeData(data.resume);
-          }
+        const idbProjects = await idbGet<WorkProject[]>('leehyejun_custom_projects');
+        if (Array.isArray(idbProjects) && idbProjects.length > 0) {
+          setProjectsList(idbProjects);
         }
       } catch (err) {
-        console.warn('Could not sync with server:', err);
+        console.warn('[Auto-Recovery] IDB check:', err);
       }
     }
 
@@ -215,12 +210,19 @@ export default function App() {
     setResumeData(newResume);
   };
 
-  const activeProject =
-    activeProjectSlug === '__closed__'
-      ? null
-      : activeProjectSlug
-      ? projectsList.find((p) => p && p.slug === activeProjectSlug) || getProjectBySlug(activeProjectSlug) || projectsList[0] || null
-      : projectsList[0] || null;
+  const activeProject = useMemo(() => {
+    if (activeProjectSlug === '__closed__') return null;
+    if (activeProjectSlug) {
+      return (
+        projectsList.find((p) => p && p.slug === activeProjectSlug) ||
+        experienceProjectsList.find((p) => p && p.slug === activeProjectSlug) ||
+        getProjectBySlug(activeProjectSlug) ||
+        projectsList[0] ||
+        null
+      );
+    }
+    return projectsList[0] || null;
+  }, [activeProjectSlug, projectsList, experienceProjectsList]);
 
   return (
     <div className="min-h-screen lg:h-screen w-full bg-white text-black flex flex-col font-sans select-text lg:overflow-hidden">
@@ -326,6 +328,17 @@ export default function App() {
           <MoreColumn
             activeProject={activeProject}
             onClearActiveProject={handleClearActiveProject}
+            onProjectUpdated={(updated) => {
+              if (isExperienceSlug(updated?.slug) || (updated?.order && updated?.order >= 100)) {
+                setExperienceProjectsList(getExperienceProjects());
+              } else {
+                setProjectsList(getAllProjects());
+              }
+            }}
+            onEditProject={(proj) => {
+              setEditingProjectForAdmin(proj);
+              setIsAdminOpen(true);
+            }}
           />
         </section>
       </div>
@@ -338,6 +351,7 @@ export default function App() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
+              setEditingProjectForAdmin(null);
               setIsAdminOpen(true);
               window.location.hash = 'admin';
             }}
@@ -355,12 +369,15 @@ export default function App() {
           isOpen={isAdminOpen}
           isAuthenticated={isAdminAuthenticated}
           onAuthenticatedChange={setIsAdminAuthenticated}
+          initialEditingProject={editingProjectForAdmin}
           onClose={() => {
             setIsAdminOpen(false);
+            setEditingProjectForAdmin(null);
             if (window.location.hash) {
               clearHash();
             }
             setProjectsList(getAllProjects());
+            setExperienceProjectsList(getExperienceProjects());
             setAboutData(getAboutData());
             setResumeData(getResumeData());
           }}

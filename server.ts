@@ -8,6 +8,17 @@ import { fetchPortfolioFromFirestore, savePortfolioToFirestore } from './src/lib
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function isExperienceSlug(slug?: string): boolean {
+  if (!slug) return false;
+  const s = slug.toLowerCase();
+  return (
+    s.includes('poing') ||
+    s.includes('como') ||
+    s.includes('librat') ||
+    s.includes('convenset')
+  );
+}
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -18,16 +29,38 @@ async function startServer() {
 
   const DATA_FILE = path.resolve(__dirname, 'src/content/custom-data.json');
 
-  // Read current shared content across all devices (Cloud Firestore + Local Disk Fallback)
+  // Read current shared content across all devices (Local Disk First + Cloud Firestore Fallback)
   app.get('/api/content', async (req, res) => {
     try {
-      // 1. Try reading from Cloud Firestore (permanent cloud persistence)
+      // 1. Read from local disk custom-data.json first
+      if (fs.existsSync(DATA_FILE)) {
+        try {
+          const localData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+          if (localData && (localData.projects || localData.experiences)) {
+            return res.json(localData);
+          }
+        } catch (e) {
+          console.warn('[Server] Error reading local data file:', e);
+        }
+      }
+
+      // 2. Fallback to Cloud Firestore
       const firestoreData = await fetchPortfolioFromFirestore();
       if (firestoreData && Array.isArray((firestoreData as any).projects) && (firestoreData as any).projects.length > 0) {
+        const allProjs = (firestoreData as any).projects;
+        const workProjs = allProjs.filter((p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100));
+        const expProjs = allProjs.filter((p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100));
+
+        const payload = {
+          ...firestoreData,
+          projects: workProjs,
+          experiences: expProjs,
+        };
+
         try {
-          fs.writeFileSync(DATA_FILE, JSON.stringify(firestoreData, null, 2), 'utf-8');
+          fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2), 'utf-8');
         } catch {}
-        return res.json(firestoreData);
+        return res.json(payload);
       }
 
       // 2. Fallback to local custom-data.json
