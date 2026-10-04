@@ -214,6 +214,13 @@ export function getResumeData(): ResumeData {
     { title: "Como Desk — 고지베리 목공방 개인프로젝트", period: "2020-21년" }
   ];
 
+  if ((customDataJson as any)?.resume) {
+    return {
+      ...((customDataJson as any).resume as ResumeData),
+      honors: defaultHonors,
+    };
+  }
+
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_resume') : null;
     if (raw) {
@@ -222,24 +229,18 @@ export function getResumeData(): ResumeData {
         return {
           totalExperience:
             (parsed.totalExperience === '총 5년 11개월' ? '총 6년 2개월' : parsed.totalExperience) ||
-            ((customDataJson as any)?.resume?.totalExperience || (resumeJson as any).totalExperience || '총 6년 2개월'),
-          education: Array.isArray(parsed.education) ? parsed.education : ((customDataJson as any)?.resume?.education || resumeJson.education || []),
+            ((resumeJson as any).totalExperience || '총 6년 2개월'),
+          education: Array.isArray(parsed.education) ? parsed.education : (resumeJson.education || []),
           honors: defaultHonors,
-          skills: Array.isArray(parsed.skills) ? parsed.skills : ((customDataJson as any)?.resume?.skills || resumeJson.skills || []),
-          certifications: Array.isArray(parsed.certifications) ? parsed.certifications : ((customDataJson as any)?.resume?.certifications || resumeJson.certifications || []),
-          experience: Array.isArray(parsed.experience) ? parsed.experience : ((customDataJson as any)?.resume?.experience || resumeJson.experience || []),
-          resumePdf: parsed.resumePdf || (customDataJson as any)?.resume?.resumePdf || resumeJson.resumePdf || '',
+          skills: Array.isArray(parsed.skills) ? parsed.skills : (resumeJson.skills || []),
+          certifications: Array.isArray(parsed.certifications) ? parsed.certifications : (resumeJson.certifications || []),
+          experience: Array.isArray(parsed.experience) ? parsed.experience : (resumeJson.experience || []),
+          resumePdf: parsed.resumePdf || resumeJson.resumePdf || '',
         };
       }
     }
   } catch {
     // fallback
-  }
-  if ((customDataJson as any)?.resume) {
-    return {
-      ...((customDataJson as any).resume as ResumeData),
-      honors: defaultHonors,
-    };
   }
   return {
     ...(resumeJson as ResumeData),
@@ -427,10 +428,10 @@ export function getExperienceProjects(): WorkProject[] {
       const localImages = Array.isArray(fromLocal?.images) ? fromLocal.images : [];
       const customImages = Array.isArray(fromCustom?.images) ? fromCustom.images : [];
       const resolvedImages =
-        localImages.length > 0
-          ? localImages
-          : customImages.length > 0
+        customImages.length > 0
           ? customImages
+          : localImages.length > 0
+          ? localImages
           : exp.images;
 
       return {

@@ -111,11 +111,18 @@ export default function App() {
         console.warn('[Server] Could not sync with /api/content:', err);
       }
 
-      // 2. SECONDARY: Fetch from Google Cloud Firestore
+      // 2. SECONDARY: Fetch from Google Cloud Firestore (only if newer than bundled data)
       try {
         const firestoreData = await fetchPortfolioFromFirestore();
+        const bundledExportTime = new Date('2026-10-04T22:43:34.858Z').getTime();
+        const firestoreExportTime = (firestoreData as any)?.exportedAt
+          ? new Date((firestoreData as any).exportedAt).getTime()
+          : 0;
+
+        // Only accept Firestore if it is strictly newer than the bundled git repository code
         if (
           firestoreData &&
+          firestoreExportTime > bundledExportTime &&
           Array.isArray((firestoreData as any).projects) &&
           (firestoreData as any).projects.length > 0
         ) {
@@ -123,35 +130,26 @@ export default function App() {
           const workProjs = fsProjects.filter((p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100));
           const expProjs = fsProjects.filter((p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100));
 
-          setProjectsList(workProjs);
-          if (expProjs.length > 0) {
-            setExperienceProjectsList(expProjs);
-            try {
-              localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(expProjs));
-            } catch {}
-          }
-
+          if (workProjs.length > 0) setProjectsList(workProjs);
+          if (expProjs.length > 0) setExperienceProjectsList(expProjs);
           if ((firestoreData as any).about) setAboutData((firestoreData as any).about);
           if ((firestoreData as any).resume) setResumeData((firestoreData as any).resume);
-
-          idbSet('leehyejun_custom_projects', workProjs).catch(() => {});
-          try {
-            localStorage.setItem('leehyejun_custom_projects', JSON.stringify(workProjs));
-          } catch {}
           return;
         }
       } catch (err) {
         console.warn('[Firestore] Client fetch:', err);
       }
 
-      // 3. FALLBACK: Check if the user's browser has saved photos in IndexedDB from previous session
-      try {
-        const idbProjects = await idbGet<WorkProject[]>('leehyejun_custom_projects');
-        if (Array.isArray(idbProjects) && idbProjects.length > 0) {
-          setProjectsList(idbProjects);
+      // 3. FALLBACK: Only if bundled projects are empty
+      if (getAllProjects().length === 0) {
+        try {
+          const idbProjects = await idbGet<WorkProject[]>('leehyejun_custom_projects');
+          if (Array.isArray(idbProjects) && idbProjects.length > 0) {
+            setProjectsList(idbProjects);
+          }
+        } catch (err) {
+          console.warn('[Auto-Recovery] IDB check:', err);
         }
-      } catch (err) {
-        console.warn('[Auto-Recovery] IDB check:', err);
       }
     }
 
