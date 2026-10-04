@@ -24,7 +24,10 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
   // Scroll to top when active project changes
   useEffect(() => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollContainerRef.current.scrollTop = 0;
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     }
   }, [activeProject?.slug]);
 
@@ -67,16 +70,6 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
             </span>
           )}
         </div>
-        {onEditProject && (
-          <button
-            type="button"
-            onClick={() => onEditProject(project)}
-            className="text-[11.5px] text-neutral-600 hover:text-black font-normal cursor-pointer transition-colors underline"
-            title="이 프로젝트에 사진 추가/관리하기"
-          >
-            + 사진 추가/관리
-          </button>
-        )}
       </div>
 
       {/* Gallery list */}
@@ -96,17 +89,8 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
           ))}
         </div>
       ) : (
-        <div className="text-[12px] text-[rgba(0,0,0,0.4)] py-4 font-normal flex items-center justify-between">
-          <span>등록된 세부 사진이 없습니다.</span>
-          {onEditProject && (
-            <button
-              type="button"
-              onClick={() => onEditProject(project)}
-              className="text-[11.5px] text-black underline cursor-pointer"
-            >
-              + 사진 등록하기
-            </button>
-          )}
+        <div className="text-[12px] text-[rgba(0,0,0,0.4)] py-4 font-normal">
+          등록된 세부 사진이 없습니다.
         </div>
       )}
     </div>
@@ -125,16 +109,6 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {onEditProject && (
-            <button
-              type="button"
-              onClick={() => onEditProject(project)}
-              className="text-[12px] text-neutral-600 hover:text-black font-normal cursor-pointer transition-colors"
-              title="이 프로젝트의 사진 추가 및 내용 수정하기"
-            >
-              [사진 추가 / 편집]
-            </button>
-          )}
           <button
             onClick={onClearActiveProject}
             className="text-[12px] text-[rgba(0,0,0,0.4)] hover:text-black font-normal cursor-pointer transition-colors"

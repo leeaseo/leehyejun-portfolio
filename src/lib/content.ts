@@ -154,7 +154,7 @@ export function getAboutData(): AboutData {
           role: parsed.role || aboutJson.role || 'Furniture Designer',
           location: parsed.location || aboutJson.location || 'Seoul, Korea',
           bio: parsed.bio || aboutJson.bio || '',
-          profileImage: parsed.profileImage || aboutJson.profileImage || '',
+          profileImage: parsed.profileImage || (aboutJson as any).profileImage || '',
           contact: {
             email: parsed.contact?.email || parsed.email || aboutJson.contact?.email || '15682@naver.com',
             instagram: parsed.contact?.instagram || aboutJson.contact?.instagram || '',
@@ -180,13 +180,7 @@ export async function syncToServer(data: {
   resume?: ResumeData;
 }): Promise<void> {
   if (typeof window === 'undefined') return;
-  // 1. Direct save to Google Cloud Firestore from client
-  try {
-    await savePortfolioToFirestore(data);
-  } catch (err) {
-    console.warn('[Firestore] Client sync error:', err);
-  }
-  // 2. Also sync to /api/publish
+  // 1. Primary: Save immediately to server disk via /api/publish
   try {
     await fetch('/api/publish', {
       method: 'POST',
@@ -195,6 +189,12 @@ export async function syncToServer(data: {
     });
   } catch (err) {
     console.warn('Sync to server warning:', err);
+  }
+  // 2. Secondary: Fire and forget Firestore save without blocking
+  try {
+    savePortfolioToFirestore(data).catch(() => {});
+  } catch (err) {
+    console.warn('[Firestore] Client sync error:', err);
   }
 }
 

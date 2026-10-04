@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { AboutResumeColumn } from './components/AboutResumeColumn';
 import { WorkColumn } from './components/WorkColumn';
 import { MoreColumn } from './components/MoreColumn';
@@ -46,6 +46,39 @@ export default function App() {
 
   // Mobile tab state
   const [mobileTab, setMobileTab] = useState<MobileTab>('work');
+
+  // Column Scroll Container Refs
+  const aboutSectionRef = useRef<HTMLElement>(null);
+  const workSectionRef = useRef<HTMLElement>(null);
+  const moreSectionRef = useRef<HTMLElement>(null);
+
+  const handleTabChange = (tab: MobileTab) => {
+    setMobileTab(tab);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+    if (tab === 'about' && aboutSectionRef.current) {
+      aboutSectionRef.current.scrollTop = 0;
+    } else if (tab === 'work' && workSectionRef.current) {
+      workSectionRef.current.scrollTop = 0;
+    } else if (tab === 'more' && moreSectionRef.current) {
+      moreSectionRef.current.scrollTop = 0;
+    }
+  };
+
+  // Ensure scroll is reset to top whenever mobile tab changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+    if (mobileTab === 'about' && aboutSectionRef.current) {
+      aboutSectionRef.current.scrollTop = 0;
+    } else if (mobileTab === 'work' && workSectionRef.current) {
+      workSectionRef.current.scrollTop = 0;
+    } else if (mobileTab === 'more' && moreSectionRef.current) {
+      moreSectionRef.current.scrollTop = 0;
+    }
+  }, [mobileTab]);
 
   // Load and sync content: 1) Server Content (Instant & Latest) -> 2) Cloud Firestore -> 3) Local Cache Fallback
   useEffect(() => {
@@ -170,8 +203,11 @@ export default function App() {
     setActiveProjectSlug(slug);
     setMobileTab('more');
     window.location.hash = `#more/${slug}`;
-    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+    if (moreSectionRef.current) {
+      moreSectionRef.current.scrollTop = 0;
     }
   };
 
@@ -179,6 +215,12 @@ export default function App() {
     setActiveProjectSlug('__closed__');
     setMobileTab('work');
     clearHash();
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+    if (workSectionRef.current) {
+      workSectionRef.current.scrollTop = 0;
+    }
   };
 
   const handleProjectAdded = (newProject: WorkProject) => {
@@ -243,20 +285,14 @@ export default function App() {
       {/* Mobile Top Navigation (only visible on mobile/tablet viewports) */}
       <header className="lg:hidden h-11 px-4 border-b border-[rgba(0,0,0,0.15)] flex items-center justify-between bg-white sticky top-0 z-30 shrink-0">
         <button
-          onClick={() => {
-            setMobileTab('about');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
+          onClick={() => handleTabChange('about')}
           className="text-[14px] font-medium text-black text-left cursor-pointer"
         >
           Lee Hye Jun
         </button>
         <nav className="flex items-center gap-1.5 text-[13px]">
           <button
-            onClick={() => {
-              setMobileTab('about');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+            onClick={() => handleTabChange('about')}
             className={`px-2 py-1 cursor-pointer font-normal transition-colors ${
               mobileTab === 'about' ? 'text-black font-medium underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)] hover:text-black'
             }`}
@@ -265,10 +301,7 @@ export default function App() {
           </button>
           <span className="text-[rgba(0,0,0,0.2)]">/</span>
           <button
-            onClick={() => {
-              setMobileTab('work');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+            onClick={() => handleTabChange('work')}
             className={`px-2 py-1 cursor-pointer font-normal transition-colors ${
               mobileTab === 'work' ? 'text-black font-medium underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)] hover:text-black'
             }`}
@@ -277,10 +310,7 @@ export default function App() {
           </button>
           <span className="text-[rgba(0,0,0,0.2)]">/</span>
           <button
-            onClick={() => {
-              setMobileTab('more');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+            onClick={() => handleTabChange('more')}
             className={`px-2 py-1 cursor-pointer font-normal transition-colors ${
               mobileTab === 'more' ? 'text-black font-medium underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)] hover:text-black'
             }`}
@@ -294,6 +324,7 @@ export default function App() {
       <div className="flex-1 flex flex-col lg:grid lg:grid-cols-3 min-h-0 lg:overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[rgba(0,0,0,0.15)]">
         {/* Column 1: About & Resume (Left - 1/3) */}
         <section
+          ref={aboutSectionRef}
           className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
             mobileTab === 'about' ? 'block' : 'hidden lg:block'
           }`}
@@ -308,6 +339,7 @@ export default function App() {
 
         {/* Column 2: Work (Middle - 1/3) */}
         <section
+          ref={workSectionRef}
           className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
             mobileTab === 'work' ? 'block' : 'hidden lg:block'
           }`}
@@ -321,6 +353,7 @@ export default function App() {
 
         {/* Column 3: More (Right - 1/3) */}
         <section
+          ref={moreSectionRef}
           className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
             mobileTab === 'more' ? 'block' : 'hidden lg:block'
           }`}

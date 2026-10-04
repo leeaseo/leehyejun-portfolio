@@ -525,7 +525,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   className={`px-2.5 sm:px-3 py-1 flex items-center gap-1 ${mainSection === 'work' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
                 >
                   <Briefcase size={11} />
-                  <span>Work</span>
+                  <span>Work & 사진 관리</span>
                 </button>
                 <button
                   type="button"
@@ -533,15 +533,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   className={`px-2.5 sm:px-3 py-1 flex items-center gap-1 ${mainSection === 'about' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
                 >
                   <User size={11} />
-                  <span>About</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMainSection('resume')}
-                  className={`px-2.5 sm:px-3 py-1 flex items-center gap-1 ${mainSection === 'resume' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
-                >
-                  <FileText size={11} />
-                  <span>Resume</span>
+                  <span>About 소개글</span>
                 </button>
               </div>
             )}
