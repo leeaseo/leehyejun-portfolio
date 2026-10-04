@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import { AboutData, ResumeData } from '../lib/types';
+import { getHonorSlug } from '../lib/experienceData';
 
 interface AboutResumeColumnProps {
   aboutData: AboutData;
   resumeData: ResumeData;
+  activeProjectSlug?: string | null;
+  onSelectProject?: (slug: string) => void;
 }
 
 export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
   aboutData,
   resumeData,
+  activeProjectSlug,
+  onSelectProject,
 }) => {
   // 처음 접속 시에는 닫혀 있고(false), 클릭 시 내용이 나타남
   const [isOpen, setIsOpen] = useState(false);
@@ -93,7 +98,7 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                         경력
                       </div>
                       <span className="text-[12px] sm:text-[12.5px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
-                        {resumeData?.totalExperience || '총 5년 11개월'}
+                        {resumeData?.totalExperience || '총 6년 2개월'}
                       </span>
                     </div>
                     <div className="space-y-4">
@@ -128,20 +133,57 @@ export const AboutResumeColumn: React.FC<AboutResumeColumnProps> = ({
                 {/* 3. 경험 */}
                 {Array.isArray(resumeData?.honors) && resumeData.honors.length > 0 && (
                   <div className="space-y-2 pb-4 border-b border-[rgba(0,0,0,0.1)]">
-                    <div className="text-[13px] font-bold text-black">
-                      경험
+                    <div className="flex justify-between items-baseline">
+                      <div className="text-[13px] font-bold text-black">
+                        경험
+                      </div>
+                      <span className="text-[11px] text-[rgba(0,0,0,0.35)]">
+                        (클릭 시 세부 아카이브 표시)
+                      </span>
                     </div>
-                    <div className="space-y-1.5">
-                      {(resumeData.honors || []).map((honor, idx) => (
-                        <div key={idx} className="flex justify-between items-start text-[13px] leading-snug gap-2">
-                          <span className="text-black font-normal pr-1">
-                            {honor?.title}
-                          </span>
-                          <span className="text-[12px] sm:text-[12.5px] text-[rgba(0,0,0,0.5)] whitespace-nowrap">
-                            ({honor?.period})
-                          </span>
-                        </div>
-                      ))}
+                    <div className="space-y-1">
+                      {(resumeData.honors || []).map((honor, idx) => {
+                        const slug = getHonorSlug(honor?.title || '', idx);
+                        const isActive = activeProjectSlug === slug;
+
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => {
+                              if (onSelectProject) {
+                                if (isActive) {
+                                  onSelectProject('__closed__');
+                                } else {
+                                  onSelectProject(slug);
+                                }
+                              }
+                            }}
+                            className={`flex justify-between items-baseline text-[13px] leading-snug gap-2 group cursor-pointer py-1 px-1.5 -mx-1.5 rounded transition-all ${
+                              isActive
+                                ? 'bg-neutral-900 text-white shadow-xs'
+                                : 'hover:bg-neutral-100 text-black'
+                            }`}
+                            title={isActive ? '클릭하여 세부 페이지 닫기' : '클릭하여 More 탭에서 세부 아카이브 보기'}
+                          >
+                            <span
+                              className={`font-normal pr-1 transition-colors ${
+                                isActive
+                                  ? 'text-white font-medium'
+                                  : 'text-black group-hover:underline decoration-[rgba(0,0,0,0.4)]'
+                              }`}
+                            >
+                              {honor?.title}
+                            </span>
+                            <span
+                              className={`text-[12px] sm:text-[12.5px] whitespace-nowrap shrink-0 transition-colors ${
+                                isActive ? 'text-neutral-300' : 'text-[rgba(0,0,0,0.5)]'
+                              }`}
+                            >
+                              ({honor?.period})
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

@@ -4,6 +4,7 @@ import customDataJson from '../content/custom-data.json';
 import { AboutData, ResumeData, WorkProject, PostItem, PostAttachment } from './types';
 import { idbGet, idbSet } from './idbStorage';
 import { savePortfolioToFirestore } from './firebase';
+import { DEFAULT_EXPERIENCE_PROJECTS } from './experienceData';
 
 // In-memory cache for full-fidelity projects (bypasses 5MB localStorage quota)
 let memoryCustomProjects: WorkProject[] | null = null;
@@ -208,7 +209,9 @@ export function getResumeData(): ResumeData {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         return {
-          totalExperience: parsed.totalExperience || ((customDataJson as any)?.resume?.totalExperience || (resumeJson as any).totalExperience || '총 5년 11개월'),
+          totalExperience:
+            (parsed.totalExperience === '총 5년 11개월' ? '총 6년 2개월' : parsed.totalExperience) ||
+            ((customDataJson as any)?.resume?.totalExperience || (resumeJson as any).totalExperience || '총 6년 2개월'),
           education: Array.isArray(parsed.education) ? parsed.education : ((customDataJson as any)?.resume?.education || resumeJson.education || []),
           honors: Array.isArray(parsed.honors) ? parsed.honors : ((customDataJson as any)?.resume?.honors || resumeJson.honors || []),
           skills: Array.isArray(parsed.skills) ? parsed.skills : ((customDataJson as any)?.resume?.skills || resumeJson.skills || []),
@@ -365,9 +368,43 @@ export function getAllProjects(): WorkProject[] {
     .sort((a, b) => (a.order || 99) - (b.order || 99));
 }
 
+export function getExperienceProjects(): WorkProject[] {
+  let list = [...DEFAULT_EXPERIENCE_PROJECTS];
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_experiences') : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        list = list.map((exp) => {
+          const match = parsed.find((p: any) => p && p.slug === exp.slug);
+          return match ? { ...exp, ...match } : exp;
+        });
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return list;
+}
+
+export function saveExperienceProject(project: WorkProject): void {
+  const current = getExperienceProjects();
+  const updated = current.map((p) => (p.slug === project.slug ? project : p));
+  try {
+    localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(updated));
+  } catch (err) {
+    console.warn('LocalStorage error on experience project save:', err);
+  }
+  syncToServer({ projects: [...getAllProjects(), ...updated] });
+}
+
 export function getProjectBySlug(slug: string): WorkProject | undefined {
   const all = getAllProjects();
-  return all.find((p) => p.slug === slug);
+  const found = all.find((p) => p.slug === slug);
+  if (found) return found;
+
+  const experiences = getExperienceProjects();
+  return experiences.find((p) => p.slug === slug);
 }
 
 export function getAllPosts(): PostItem[] {

@@ -296,7 +296,12 @@ export default function App() {
             mobileTab === 'about' ? 'block' : 'hidden lg:block'
           }`}
         >
-          <AboutResumeColumn aboutData={aboutData} resumeData={resumeData} />
+          <AboutResumeColumn
+            aboutData={aboutData}
+            resumeData={resumeData}
+            activeProjectSlug={activeProjectSlug}
+            onSelectProject={handleSelectProject}
+          />
         </section>
 
         {/* Column 2: Work (Middle - 1/3) */}

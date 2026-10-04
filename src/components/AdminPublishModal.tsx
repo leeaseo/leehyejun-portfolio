@@ -9,7 +9,10 @@ import {
   getResumeData,
   saveResumeData,
   syncToServer,
+  getExperienceProjects,
+  saveExperienceProject,
 } from '../lib/content';
+import { getHonorSlug } from '../lib/experienceData';
 import { savePortfolioToFirestore, deleteProjectFromFirestore } from '../lib/firebase';
 import { compressImageFile } from '../lib/imageCompressor';
 import {
@@ -421,16 +424,26 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
       content: content || '프로젝트 상세 내용입니다.',
     };
 
-    saveCustomProject(projectData, editingSlug || undefined);
-    const refreshed = getAllProjects();
-    setProjectsList(refreshed);
-    setEditingSlug(finalSlug);
-    onProjectAdded(projectData);
+    const isExp =
+      Number(order) >= 100 ||
+      getExperienceProjects().some((e) => e.slug === editingSlug || e.slug === finalSlug);
+
+    if (isExp) {
+      saveExperienceProject(projectData);
+      onProjectAdded(projectData);
+    } else {
+      saveCustomProject(projectData, editingSlug || undefined);
+      const refreshed = getAllProjects();
+      setProjectsList(refreshed);
+      setEditingSlug(finalSlug);
+      onProjectAdded(projectData);
+    }
+
     setIsSaved(true);
 
     // Save directly to Google Cloud Firestore permanently!
     savePortfolioToFirestore({
-      projects: refreshed,
+      projects: getAllProjects(),
       about: getAboutData(),
       resume: getResumeData(),
     }).catch((err) => console.error('[Firestore] Save error:', err));
@@ -768,11 +781,11 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
 
                 <div>
                   <label className="block text-[10.5px] text-[rgba(0,0,0,0.4)] mb-1">
-                    총 경력 요약 (예: 총 5년 11개월)
+                    총 경력 요약 (예: 총 6년 2개월)
                   </label>
                   <input
                     type="text"
-                    placeholder="총 5년 11개월"
+                    placeholder="총 6년 2개월"
                     value={resumeForm.totalExperience || ''}
                     onChange={(e) =>
                       setResumeForm({ ...resumeForm, totalExperience: e.target.value })
@@ -871,42 +884,67 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     + 항목 추가
                   </button>
                 </div>
-                {(resumeForm.honors || []).map((h, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="수상 / 경험 내역"
-                      value={h.title}
-                      onChange={(e) => {
-                        const copy = [...(resumeForm.honors || [])];
-                        copy[idx].title = e.target.value;
-                        setResumeForm({ ...resumeForm, honors: copy });
-                      }}
-                      className="flex-1 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px]"
-                    />
-                    <input
-                      type="text"
-                      placeholder="연도"
-                      value={h.period}
-                      onChange={(e) => {
-                        const copy = [...(resumeForm.honors || [])];
-                        copy[idx].period = e.target.value;
-                        setResumeForm({ ...resumeForm, honors: copy });
-                      }}
-                      className="w-24 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const copy = (resumeForm.honors || []).filter((_, i) => i !== idx);
-                        setResumeForm({ ...resumeForm, honors: copy });
-                      }}
-                      className="text-red-600 p-1"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
+                {(resumeForm.honors || []).map((h, idx) => {
+                  const slug = getHonorSlug(h.title, idx);
+                  const matchingExp = getExperienceProjects().find((e) => e.slug === slug);
+
+                  return (
+                    <div key={idx} className="p-2.5 border border-[rgba(0,0,0,0.12)] bg-white space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="수상 / 경험 내역"
+                          value={h.title}
+                          onChange={(e) => {
+                            const copy = [...(resumeForm.honors || [])];
+                            copy[idx].title = e.target.value;
+                            setResumeForm({ ...resumeForm, honors: copy });
+                          }}
+                          className="flex-1 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px]"
+                        />
+                        <input
+                          type="text"
+                          placeholder="연도"
+                          value={h.period}
+                          onChange={(e) => {
+                            const copy = [...(resumeForm.honors || [])];
+                            copy[idx].period = e.target.value;
+                            setResumeForm({ ...resumeForm, honors: copy });
+                          }}
+                          className="w-24 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const copy = (resumeForm.honors || []).filter((_, i) => i !== idx);
+                            setResumeForm({ ...resumeForm, honors: copy });
+                          }}
+                          className="text-red-600 p-1 cursor-pointer"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+
+                      {matchingExp && (
+                        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[rgba(0,0,0,0.06)]">
+                          <span className="text-[rgba(0,0,0,0.5)]">
+                            연결된 상세 More 아카이브: <strong className="text-black font-normal">{matchingExp.title}</strong>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMainSection('work');
+                              handleSelectProjectToEdit(matchingExp);
+                            }}
+                            className="text-black underline font-medium hover:opacity-75 cursor-pointer"
+                          >
+                            상세 내용 / 사진 편집하기 →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* 4. 자격 및 소프트웨어 능력 */}
@@ -998,6 +1036,41 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* 경험 아카이브 프로젝트 (Resume 상세 전용) */}
+              <div className="pt-5 border-t border-[rgba(0,0,0,0.15)] space-y-3">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
+                  <div className="font-medium text-[13px] text-black">
+                    경험 아카이브 프로젝트 (Resume 상세 전용)
+                  </div>
+                  <span className="text-[11px] text-[rgba(0,0,0,0.45)]">
+                    *Work 목록에는 숨겨져 있으며, Resume 경험 항목을 클릭했을 때 More 탭에 열립니다.
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {getExperienceProjects().map((exp) => (
+                    <div
+                      key={exp.slug}
+                      className="p-3 border border-neutral-200 bg-neutral-50 flex items-center justify-between gap-3"
+                    >
+                      <div className="space-y-0.5 truncate">
+                        <div className="text-[13px] font-medium text-black truncate">{exp.title}</div>
+                        <div className="text-[11px] text-[rgba(0,0,0,0.5)] truncate">
+                          {exp.materials} · {exp.dimensions}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectProjectToEdit(exp)}
+                        className="text-[12px] bg-white border border-[rgba(0,0,0,0.2)] px-2.5 py-1 flex items-center gap-1 hover:bg-neutral-100 cursor-pointer shrink-0"
+                      >
+                        <Edit3 size={11} />
+                        <span>상세 내용/사진 수정</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
