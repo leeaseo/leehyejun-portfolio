@@ -270,25 +270,26 @@ export function isExperienceSlug(slug?: string): boolean {
 
 export function getCustomProjects(): WorkProject[] {
   let list: WorkProject[] = [];
-  // 1. Check in-memory cache first (preserves original high-res photos)
+  // 1. Check in-memory cache first
   if (memoryCustomProjects && memoryCustomProjects.length > 0) {
     list = memoryCustomProjects;
   } else {
-    // 2. Check localStorage
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_projects') : null;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          memoryCustomProjects = parsed;
-          list = parsed;
-        }
-      }
-    } catch {}
-
-    // 3. Fallback to bundled custom-data.json
-    if (list.length === 0 && (customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects)) {
+    // 2. Primary: Bundled custom-data.json (Git repository source of truth)
+    if ((customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects) && (customDataJson as any).projects.length > 0) {
       list = (customDataJson as any).projects;
+      memoryCustomProjects = list;
+    } else {
+      // 3. Fallback: localStorage
+      try {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_projects') : null;
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            memoryCustomProjects = parsed;
+            list = parsed;
+          }
+        }
+      } catch {}
     }
   }
 
