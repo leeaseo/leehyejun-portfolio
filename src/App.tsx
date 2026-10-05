@@ -222,24 +222,50 @@ export default function App() {
   };
 
   const handleProjectAdded = (newProject: WorkProject) => {
-    // Immediately update live project state in place, preserving order stability
-    setProjectsList((prev) => {
-      let replaced = false;
-      const updated = prev.map((p) => {
-        if (p.slug === newProject.slug || p.order === newProject.order) {
-          replaced = true;
-          return newProject;
+    const isExp =
+      isExperienceSlug(newProject.slug) ||
+      (typeof newProject.order === 'number' && newProject.order >= 100);
+
+    if (isExp) {
+      setExperienceProjectsList((prev) => {
+        let replaced = false;
+        const updated = prev.map((p) => {
+          if (p.slug === newProject.slug) {
+            replaced = true;
+            return newProject;
+          }
+          return p;
+        });
+        if (!replaced) {
+          updated.push(newProject);
         }
-        return p;
+        return updated;
       });
-      if (!replaced) {
-        updated.push(newProject);
-      }
-      return updated.sort((a, b) => (a.order || 99) - (b.order || 99));
-    });
+    } else {
+      setProjectsList((prev) => {
+        let replaced = false;
+        const updated = prev.map((p) => {
+          if (p.slug === newProject.slug || p.order === newProject.order) {
+            replaced = true;
+            return newProject;
+          }
+          return p;
+        });
+        if (!replaced) {
+          updated.push(newProject);
+        }
+        return updated.sort((a, b) => (a.order || 99) - (b.order || 99));
+      });
+    }
+
     setActiveProjectSlug(newProject.slug);
     setMobileTab('more');
     window.location.hash = `#more/${newProject.slug}`;
+  };
+
+  const handleBatchUpdated = (projects: WorkProject[], experiences: WorkProject[]) => {
+    setProjectsList(projects);
+    setExperienceProjectsList(experiences);
   };
 
   const handleAboutUpdated = (newAbout: AboutData) => {
@@ -413,6 +439,7 @@ export default function App() {
             setResumeData(getResumeData());
           }}
           onProjectAdded={handleProjectAdded}
+          onBatchUpdated={handleBatchUpdated}
           onAboutUpdated={handleAboutUpdated}
           onResumeUpdated={handleResumeUpdated}
         />

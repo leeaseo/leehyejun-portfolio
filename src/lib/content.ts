@@ -8,12 +8,19 @@ import { DEFAULT_EXPERIENCE_PROJECTS } from './experienceData';
 
 // In-memory cache for full-fidelity projects (bypasses 5MB localStorage quota)
 let memoryCustomProjects: WorkProject[] | null = null;
+let memoryExperienceProjects: WorkProject[] | null = null;
 
 // Initialize from IndexedDB asynchronously on browser startup
 if (typeof window !== 'undefined') {
   idbGet<WorkProject[]>('leehyejun_custom_projects').then((saved) => {
     if (Array.isArray(saved) && saved.length > 0) {
       memoryCustomProjects = saved;
+    }
+  }).catch(() => {});
+
+  idbGet<WorkProject[]>('leehyejun_custom_experiences').then((saved) => {
+    if (Array.isArray(saved) && saved.length > 0) {
+      memoryExperienceProjects = saved;
     }
   }).catch(() => {});
 }
@@ -403,6 +410,9 @@ export function getAllProjects(): WorkProject[] {
 }
 
 export function getExperienceProjects(): WorkProject[] {
+  if (memoryExperienceProjects && memoryExperienceProjects.length > 0) {
+    return memoryExperienceProjects;
+  }
   let list = [...DEFAULT_EXPERIENCE_PROJECTS];
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_experiences') : null;
@@ -436,11 +446,11 @@ export function getExperienceProjects(): WorkProject[] {
 
       return {
         ...exp,
-        title: exp.title,
-        date: exp.date,
-        materials: exp.materials,
-        dimensions: exp.dimensions,
-        content: exp.content,
+        title: match.title || exp.title,
+        date: match.date || exp.date,
+        materials: match.materials !== undefined ? match.materials : exp.materials,
+        dimensions: match.dimensions !== undefined ? match.dimensions : exp.dimensions,
+        content: match.content !== undefined ? match.content : exp.content,
         images: resolvedImages,
         thumbnail: match.thumbnail || resolvedImages[0] || exp.thumbnail,
         externalUrl: match.externalUrl || exp.externalUrl,
@@ -465,12 +475,32 @@ export function saveExperienceProject(project: WorkProject): void {
   if (!found) {
     updated.push(project);
   }
+  memoryExperienceProjects = updated;
+
+  if (typeof window !== 'undefined') {
+    idbSet('leehyejun_custom_experiences', updated).catch(() => {});
+  }
+
   try {
     localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(updated));
   } catch (err) {
     console.warn('LocalStorage error on experience project save:', err);
   }
   syncToServer({ experiences: updated });
+}
+
+export function saveAllProjectsBatch(projects: WorkProject[], experiences: WorkProject[]): void {
+  memoryCustomProjects = projects;
+  memoryExperienceProjects = experiences;
+  if (typeof window !== 'undefined') {
+    idbSet('leehyejun_custom_projects', projects).catch(() => {});
+    idbSet('leehyejun_custom_experiences', experiences).catch(() => {});
+    try {
+      localStorage.setItem('leehyejun_custom_projects', JSON.stringify(projects));
+      localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(experiences));
+    } catch {}
+  }
+  syncToServer({ projects, experiences });
 }
 
 export function getProjectBySlug(slug: string): WorkProject | undefined {

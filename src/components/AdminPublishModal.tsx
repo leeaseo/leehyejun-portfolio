@@ -11,6 +11,8 @@ import {
   syncToServer,
   getExperienceProjects,
   saveExperienceProject,
+  saveAllProjectsBatch,
+  isExperienceSlug,
 } from '../lib/content';
 import { getHonorSlug } from '../lib/experienceData';
 import { savePortfolioToFirestore, deleteProjectFromFirestore } from '../lib/firebase';
@@ -41,6 +43,7 @@ interface AdminPublishModalProps {
   onProjectAdded: (newProject: WorkProject) => void;
   onAboutUpdated: (newAbout: AboutData) => void;
   onResumeUpdated: (newResume: ResumeData) => void;
+  onBatchUpdated?: (projects: WorkProject[], experiences: WorkProject[]) => void;
   isAuthenticated?: boolean;
   onAuthenticatedChange?: (authed: boolean) => void;
   initialEditingProject?: WorkProject | null;
@@ -51,6 +54,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   onProjectAdded,
   onAboutUpdated,
   onResumeUpdated,
+  onBatchUpdated,
   isAuthenticated: propIsAuthenticated,
   onAuthenticatedChange,
   initialEditingProject,
@@ -73,20 +77,6 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     }
   }, [propIsAuthenticated]);
 
-  // Auto-select first project (#1) or specified project on open
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      const list = getAllProjects();
-      setProjectsList(list);
-      if (initialEditingProject) {
-        setMainSection('work');
-        setWorkTab('editor');
-        handleSelectProjectToEdit(initialEditingProject);
-      } else if (!editingSlug && list.length > 0) {
-        handleSelectProjectToEdit(list[0]);
-      }
-    }
-  }, [isAuthenticated, initialEditingProject]);
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -96,6 +86,9 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   // Work Sub-tab: 'editor' | 'list'
   const [workTab, setWorkTab] = useState<'editor' | 'list'>('editor');
   const [projectsList, setProjectsList] = useState<WorkProject[]>(getAllProjects);
+  const [draftProjects, setDraftProjects] = useState<WorkProject[]>(getAllProjects);
+  const [draftExperiences, setDraftExperiences] = useState<WorkProject[]>(getExperienceProjects);
+  const [modifiedSlugs, setModifiedSlugs] = useState<Set<string>>(new Set());
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
 
   // Work Form states
@@ -121,6 +114,81 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const [resumeForm, setResumeForm] = useState<ResumeData>(getResumeData);
 
   const [isSaved, setIsSaved] = useState(false);
+
+  const loadProjectIntoForm = (proj: WorkProject) => {
+    setEditingSlug(proj.slug);
+    setTitle(proj.title || '');
+    setSlug(proj.slug);
+    setDate(proj.date || '2026');
+    setMaterials(proj.materials || '');
+    setDimensions(proj.dimensions || '');
+    setOrder(typeof proj.order === 'number' ? proj.order : 1);
+    setExternalUrl(proj.externalUrl || '');
+    setContent(proj.content || '');
+    setThumbnail(proj.thumbnail || '');
+    const cleanImages = (proj.images || []).filter(
+      (img) => img && !img.includes('display-system-1.jpg') && !img.includes('display-system-2.jpg')
+    );
+    setDetailImages(cleanImages);
+    setWorkTab('editor');
+  };
+
+  // Auto-select first project (#1) or specified project on open
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      const pList = getAllProjects();
+      const expList = getExperienceProjects();
+      setDraftProjects(pList);
+      setDraftExperiences(expList);
+      setProjectsList(pList);
+
+      if (initialEditingProject) {
+        setMainSection('work');
+        setWorkTab('editor');
+        const isExp =
+          (typeof initialEditingProject.order === 'number' && initialEditingProject.order >= 100) ||
+          isExperienceSlug(initialEditingProject.slug);
+        const target = isExp
+          ? expList.find((e) => e.slug === initialEditingProject.slug) || initialEditingProject
+          : pList.find((p) => p.slug === initialEditingProject.slug) || initialEditingProject;
+        loadProjectIntoForm(target);
+      } else if (!editingSlug && pList.length > 0) {
+        loadProjectIntoForm(pList[0]);
+      }
+    }
+  }, [isAuthenticated, initialEditingProject]);
+
+  const commitCurrentProjectToDraft = (currentSlug: string | null) => {
+    if (!currentSlug) return;
+    const currentData: Partial<WorkProject> = {
+      title,
+      slug: currentSlug,
+      date,
+      thumbnail: thumbnail || '',
+      images: detailImages,
+      materials,
+      dimensions,
+      externalUrl: externalUrl || undefined,
+      order: Number(order) || 1,
+      content,
+    };
+
+    const isExp =
+      Number(order) >= 100 ||
+      isExperienceSlug(currentSlug) ||
+      draftExperiences.some((e) => e.slug === currentSlug);
+
+    if (isExp) {
+      setDraftExperiences((prev) =>
+        prev.map((e) => (e.slug === currentSlug ? ({ ...e, ...currentData } as WorkProject) : e))
+      );
+    } else {
+      setDraftProjects((prev) =>
+        prev.map((p) => (p.slug === currentSlug ? ({ ...p, ...currentData } as WorkProject) : p))
+      );
+    }
+    setModifiedSlugs((prev) => new Set(prev).add(currentSlug));
+  };
 
   const thumbnailFileInputRef = useRef<HTMLInputElement>(null);
   const detailFileInputRef = useRef<HTMLInputElement>(null);
@@ -328,32 +396,35 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   };
 
   const handleSelectProjectToEdit = (proj: WorkProject) => {
-    setEditingSlug(proj.slug);
-    setTitle(proj.title);
-    setSlug(proj.slug);
-    setDate(proj.date);
-    setMaterials(proj.materials);
-    setDimensions(proj.dimensions);
-    setOrder(proj.order);
-    setExternalUrl(proj.externalUrl || '');
-    setContent(proj.content);
-    setThumbnail(proj.thumbnail || '');
-    // Filter out dummy template images automatically
-    const cleanImages = (proj.images || []).filter(
-      (img) => img && !img.includes('display-system-1.jpg') && !img.includes('display-system-2.jpg')
-    );
-    setDetailImages(cleanImages);
-    setWorkTab('editor');
+    // 1. Commit previous project before switching
+    if (editingSlug) {
+      commitCurrentProjectToDraft(editingSlug);
+    }
+
+    // 2. Find target project in drafts
+    const isTargetExp =
+      (typeof proj.order === 'number' && proj.order >= 100) ||
+      isExperienceSlug(proj.slug) ||
+      draftExperiences.some((e) => e.slug === proj.slug);
+
+    const target = isTargetExp
+      ? draftExperiences.find((e) => e.slug === proj.slug) || proj
+      : draftProjects.find((p) => p.slug === proj.slug) || proj;
+
+    loadProjectIntoForm(target);
   };
 
   const handleNewProject = () => {
+    if (editingSlug) {
+      commitCurrentProjectToDraft(editingSlug);
+    }
     setEditingSlug(null);
     setTitle('');
     setSlug('');
     setDate('2026');
     setMaterials('');
     setDimensions('');
-    setOrder(projectsList.length + 1);
+    setOrder(draftProjects.length + 1);
     setExternalUrl('');
     setContent('');
     setThumbnail('');
@@ -366,11 +437,19 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       deleteCustomProject(slugToDelete);
       deleteProjectFromFirestore(slugToDelete).catch(() => {});
       const updated = getAllProjects();
+      setDraftProjects(updated);
       setProjectsList(updated);
       if (editingSlug === slugToDelete) {
         handleNewProject();
       }
     }
+  };
+
+  const handleSwitchSection = (section: 'work' | 'about' | 'resume') => {
+    if (mainSection === 'work' && editingSlug) {
+      commitCurrentProjectToDraft(editingSlug);
+    }
+    setMainSection(section);
   };
 
   const generateMdxText = (): string => {
@@ -408,58 +487,92 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     URL.revokeObjectURL(url);
   };
 
-  const handlePublishWork = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      alert('프로젝트명을 입력해주세요.');
-      return;
+  const handlePublishWork = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    // 1. Commit active project into draft arrays
+    let finalProjects = [...draftProjects];
+    let finalExperiences = [...draftExperiences];
+
+    if (editingSlug) {
+      const currentProjectData: WorkProject = {
+        title: title.trim() || 'Untitled',
+        slug: editingSlug,
+        date,
+        thumbnail: thumbnail || '',
+        images: detailImages,
+        materials: materials || 'Aluminum Extrusions, Hardware',
+        dimensions: dimensions || 'Various Dimensions',
+        externalUrl: externalUrl || undefined,
+        order: Number(order) || 1,
+        content: content || '프로젝트 상세 내용입니다.',
+      };
+
+      const isExp =
+        Number(order) >= 100 ||
+        isExperienceSlug(editingSlug) ||
+        finalExperiences.some((e) => e.slug === editingSlug);
+
+      if (isExp) {
+        finalExperiences = finalExperiences.map((e) =>
+          e.slug === editingSlug ? { ...e, ...currentProjectData } : e
+        );
+      } else {
+        let found = false;
+        finalProjects = finalProjects.map((p) => {
+          if (p.slug === editingSlug) {
+            found = true;
+            return { ...p, ...currentProjectData };
+          }
+          return p;
+        });
+        if (!found) {
+          finalProjects.push(currentProjectData);
+        }
+      }
     }
 
-    const finalSlug = editingSlug || slug.trim() || `project-${Date.now()}`;
+    // 2. Save all projects and experiences in storage & cache
+    for (const p of finalProjects) {
+      saveCustomProject(p, p.slug);
+    }
+    for (const exp of finalExperiences) {
+      saveExperienceProject(exp);
+    }
 
-    const projectData: WorkProject = {
-      title,
-      slug: finalSlug,
-      date,
-      thumbnail: thumbnail || '',
-      images: detailImages,
-      materials: materials || 'Aluminum Extrusions, Hardware',
-      dimensions: dimensions || 'Various Dimensions',
-      externalUrl: externalUrl || undefined,
-      order: Number(order) || 1,
-      content: content || '프로젝트 상세 내용입니다.',
-    };
+    // 3. Also save About & Resume
+    saveAboutData(aboutForm);
+    saveResumeData(resumeForm);
 
-    const isExp =
-      Number(order) >= 100 ||
-      getExperienceProjects().some((e) => e.slug === editingSlug || e.slug === finalSlug);
+    saveAllProjectsBatch(finalProjects, finalExperiences);
 
-    if (isExp) {
-      saveExperienceProject(projectData);
-      onProjectAdded(projectData);
-    } else {
-      saveCustomProject(projectData, editingSlug || undefined);
-      const refreshed = getAllProjects();
-      setProjectsList(refreshed);
-      setEditingSlug(finalSlug);
-      onProjectAdded(projectData);
+    setDraftProjects(finalProjects);
+    setDraftExperiences(finalExperiences);
+    setProjectsList(finalProjects);
+
+    onBatchUpdated?.(finalProjects, finalExperiences);
+    onAboutUpdated(aboutForm);
+    onResumeUpdated(resumeForm);
+    if (editingSlug) {
+      const currentP = [...finalProjects, ...finalExperiences].find((p) => p.slug === editingSlug);
+      if (currentP) onProjectAdded(currentP);
     }
 
     setIsSaved(true);
 
     // Sync to local server file & Firestore immediately
     syncToServer({
-      projects: getAllProjects(),
-      experiences: getExperienceProjects(),
-      about: getAboutData(),
-      resume: getResumeData(),
+      projects: finalProjects,
+      experiences: finalExperiences,
+      about: aboutForm,
+      resume: resumeForm,
     });
 
     savePortfolioToFirestore({
-      projects: getAllProjects(),
-      experiences: getExperienceProjects(),
-      about: getAboutData(),
-      resume: getResumeData(),
+      projects: finalProjects,
+      experiences: finalExperiences,
+      about: aboutForm,
+      resume: resumeForm,
     }).catch((err) => console.error('[Firestore] Save error:', err));
 
     setTimeout(() => {
@@ -470,40 +583,12 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
 
   // About Form Save Handler
   const handleSaveAbout = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveAboutData(aboutForm);
-    onAboutUpdated(aboutForm);
-    setIsSaved(true);
-
-    savePortfolioToFirestore({
-      projects: getAllProjects(),
-      about: aboutForm,
-      resume: getResumeData(),
-    }).catch((err) => console.error('[Firestore] Save error:', err));
-
-    setTimeout(() => {
-      setIsSaved(false);
-      onClose();
-    }, 900);
+    handlePublishWork(e);
   };
 
   // Resume Form Save Handler
   const handleSaveResume = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveResumeData(resumeForm);
-    onResumeUpdated(resumeForm);
-    setIsSaved(true);
-
-    savePortfolioToFirestore({
-      projects: getAllProjects(),
-      about: getAboutData(),
-      resume: resumeForm,
-    }).catch((err) => console.error('[Firestore] Save error:', err));
-
-    setTimeout(() => {
-      setIsSaved(false);
-      onClose();
-    }, 900);
+    handlePublishWork(e);
   };
 
   return (
@@ -521,7 +606,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               <div className="flex items-center border border-[rgba(0,0,0,0.15)] text-[11px] sm:text-[12px]">
                 <button
                   type="button"
-                  onClick={() => setMainSection('work')}
+                  onClick={() => handleSwitchSection('work')}
                   className={`px-2.5 sm:px-3 py-1 flex items-center gap-1 ${mainSection === 'work' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
                 >
                   <Briefcase size={11} />
@@ -529,7 +614,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMainSection('about')}
+                  onClick={() => handleSwitchSection('about')}
                   className={`px-2.5 sm:px-3 py-1 flex items-center gap-1 ${mainSection === 'about' ? 'bg-black text-white' : 'text-black hover:bg-neutral-100'}`}
                 >
                   <User size={11} />
@@ -1095,8 +1180,9 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 <div className="space-y-1">
                   <div className="text-[10.5px] font-bold text-neutral-600 uppercase tracking-wider">Work 프로젝트</div>
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                    {projectsList.map((p) => {
+                    {draftProjects.map((p) => {
                       const isSelected = editingSlug === p.slug;
+                      const isModified = modifiedSlugs.has(p.slug);
                       return (
                         <button
                           key={p.slug}
@@ -1112,6 +1198,9 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                             #{p.order}
                           </span>
                           <span className="max-w-[130px] truncate">{p.title || 'Untitled'}</span>
+                          {isModified && (
+                            <span className="text-[10px] text-amber-500 font-bold" title="수정 중">●</span>
+                          )}
                         </button>
                       );
                     })}
@@ -1133,8 +1222,9 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 <div className="space-y-1 pt-1">
                   <div className="text-[10.5px] font-bold text-neutral-600 uppercase tracking-wider">Resume 경험 프로젝트 (More 사진 관리)</div>
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                    {getExperienceProjects().map((exp) => {
+                    {draftExperiences.map((exp) => {
                       const isSelected = editingSlug === exp.slug;
+                      const isModified = modifiedSlugs.has(exp.slug);
                       return (
                         <button
                           key={exp.slug}
@@ -1149,6 +1239,9 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                           <span className="text-[10.5px] px-1 bg-neutral-200 text-neutral-800 rounded font-mono">경험</span>
                           <span className="max-w-[150px] truncate">{exp.title || 'Untitled'}</span>
                           <span className="text-[11px] opacity-60 font-mono">({(exp.images || []).length}장)</span>
+                          {isModified && (
+                            <span className="text-[10px] text-amber-500 font-bold" title="수정 중">●</span>
+                          )}
                         </button>
                       );
                     })}
