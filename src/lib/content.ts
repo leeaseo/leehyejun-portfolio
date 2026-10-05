@@ -310,9 +310,9 @@ export function saveCustomProject(project: WorkProject, originalSlug?: string): 
   const targetSlug = originalSlug || project.slug;
 
   let replaced = false;
-  // Replace in place: matching by originalSlug, slug, or exact order slot
+  // Replace in place: matching strictly by slug
   const updated = existing.map((p) => {
-    if (p.slug === targetSlug || p.slug === project.slug || p.order === project.order) {
+    if (p.slug === targetSlug || p.slug === project.slug) {
       replaced = true;
       return project;
     }
@@ -364,47 +364,49 @@ export function deleteCustomProject(slug: string): void {
 }
 
 export function getAllProjects(): WorkProject[] {
-  const projects: WorkProject[] = [];
+  const projectsMap = new Map<string, WorkProject>();
 
+  // 1. Seed with bundled MDX files
   for (const [path, rawContent] of Object.entries(workModules)) {
     const { frontmatter, content } = parseFrontmatter<Partial<WorkProject>>(rawContent);
     const slugFromPath = path.split('/').pop()?.replace('.mdx', '') || '';
-
-    projects.push({
-      title: frontmatter.title || 'Untitled Project',
-      slug: frontmatter.slug || slugFromPath,
-      date: frontmatter.date || '2025',
-      thumbnail: frontmatter.thumbnail || '',
-      images: frontmatter.images || [],
-      materials: frontmatter.materials || 'Aluminum, Steel',
-      dimensions: frontmatter.dimensions || 'Various Dimensions',
-      externalUrl: frontmatter.externalUrl,
-      order: typeof frontmatter.order === 'number' ? frontmatter.order : 99,
-      content: content,
-    });
+    const slug = frontmatter.slug || slugFromPath;
+    if (slug) {
+      projectsMap.set(slug, {
+        title: frontmatter.title || 'Untitled Project',
+        slug,
+        date: frontmatter.date || '2025',
+        thumbnail: frontmatter.thumbnail || '',
+        images: frontmatter.images || [],
+        materials: frontmatter.materials || 'Aluminum, Steel',
+        dimensions: frontmatter.dimensions || 'Various Dimensions',
+        externalUrl: frontmatter.externalUrl,
+        order: typeof frontmatter.order === 'number' ? frontmatter.order : 99,
+        content: content,
+      });
+    }
   }
 
-  // Merge custom owner-published projects (matches either by slug, order slot, or title)
+  // 2. Overlay / add custom projects by slug (custom projects take precedence)
   const custom = getCustomProjects();
   if (Array.isArray(custom)) {
     for (const cp of custom) {
       if (!cp || !cp.slug) continue;
-      const existingIdx = projects.findIndex(
-        (p) =>
-          p &&
-          (p.slug === cp.slug ||
-            p.order === cp.order ||
-            (p.title && cp.title && p.title.trim().toLowerCase() === cp.title.trim().toLowerCase()))
-      );
-      if (existingIdx !== -1) {
-        projects[existingIdx] = cp;
-      } else {
-        projects.push(cp);
+      let matchedKey = cp.slug;
+      if (!projectsMap.has(cp.slug)) {
+        for (const [k, p] of projectsMap.entries()) {
+          if (p.title && cp.title && p.title.trim().toLowerCase() === cp.title.trim().toLowerCase()) {
+            matchedKey = k;
+            break;
+          }
+        }
       }
+      projectsMap.set(matchedKey, cp);
     }
   }
 
-  return projects
+  const list = Array.from(projectsMap.values());
+  return list
     .filter((p): p is WorkProject => Boolean(p && p.slug && !isExperienceSlug(p.slug) && (!p.order || p.order < 100)))
     .sort((a, b) => (a.order || 99) - (b.order || 99));
 }

@@ -1,12 +1,13 @@
 {
-  "role": "Furniture Designer",
-  "bio": "일상에서 편안함을 느낄 수 있는 것들을 좋아합니다. 공간과 가구는 우리 삶의 모든 순간에 존재하며 시각적이거나 기능적으로 가장 오래도록 직접적인 영향을 미친다고 생각합니다. 무엇이 진정한 편안함인지 심도 있게 고민하고 일상의 균형을 맞춰주는 공간과 가구를 디자인합니다. 형태와 기능 사이에서 세밀하게 조율하며 사용하는 사람의 일상 속에 자연스럽게 스며드는 것을 지향합니다.",
   "name": "Lee Hye Jun",
+  "role": "Furniture Designer",
+  "location": "Korea, Republic of",
+  "bio": "일상에서 편안함을 느낄 수 있는 것들을 좋아합니다. 공간과 가구는 우리 삶의 모든 순간에 존재하며 시각적이거나 기능적으로 가장 오래도록 직접적인 영향을 미친다고 생각합니다. 무엇이 진정한 편안함인지 심도 있게 고민하고 일상의 균형을 맞춰주는 공간과 가구를 디자인합니다. 형태와 기능 사이에서 세밀하게 조율하며 사용하는 사람의 일상 속에 자연스럽게 스며드는 것을 지향합니다. ",
+  "profileImage": "/images/profile.jpg",
   "contact": {
-    "linkedin": "https://linkedin.com/in/leehyejun",
-    "github": "",
+    "email": "15682@naver.com",
     "instagram": "",
-    "email": "15682@naver.com"
-  },
-  "location": "Korea, Republic of"
+    "linkedin": "https://linkedin.com/in/leehyejun",
+    "github": ""
+  }
 }

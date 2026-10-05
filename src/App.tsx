@@ -245,7 +245,7 @@ export default function App() {
       setProjectsList((prev) => {
         let replaced = false;
         const updated = prev.map((p) => {
-          if (p.slug === newProject.slug || p.order === newProject.order) {
+          if (p.slug === newProject.slug) {
             replaced = true;
             return newProject;
           }

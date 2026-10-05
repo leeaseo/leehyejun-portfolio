@@ -159,35 +159,61 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   }, [isAuthenticated, initialEditingProject]);
 
   const commitCurrentProjectToDraft = (currentSlug: string | null) => {
-    if (!currentSlug) return;
-    const currentData: Partial<WorkProject> = {
-      title,
-      slug: currentSlug,
-      date,
+    const activeTitle = title.trim();
+    if (!currentSlug && !activeTitle && !thumbnail && detailImages.length === 0) return;
+
+    const targetSlug =
+      currentSlug ||
+      slug.trim() ||
+      activeTitle.toLowerCase().replace(/[^a-z0-9가-힣\s-]/g, '').trim().replace(/\s+/g, '-') ||
+      `project-${Date.now()}`;
+
+    const currentData: WorkProject = {
+      title: activeTitle || 'Untitled',
+      slug: targetSlug,
+      date: date || '2026',
       thumbnail: thumbnail || '',
       images: detailImages,
-      materials,
-      dimensions,
+      materials: materials || 'Aluminum Extrusions, Hardware',
+      dimensions: dimensions || 'Various Dimensions',
       externalUrl: externalUrl || undefined,
-      order: Number(order) || 1,
-      content,
+      order: Number(order) || (draftProjects.length + 1),
+      content: content || '프로젝트 상세 내용입니다.',
     };
 
     const isExp =
       Number(order) >= 100 ||
-      isExperienceSlug(currentSlug) ||
-      draftExperiences.some((e) => e.slug === currentSlug);
+      isExperienceSlug(targetSlug) ||
+      draftExperiences.some((e) => e.slug === targetSlug);
 
     if (isExp) {
-      setDraftExperiences((prev) =>
-        prev.map((e) => (e.slug === currentSlug ? ({ ...e, ...currentData } as WorkProject) : e))
-      );
+      let found = false;
+      setDraftExperiences((prev) => {
+        const updated = prev.map((e) => {
+          if (e.slug === targetSlug) {
+            found = true;
+            return { ...e, ...currentData };
+          }
+          return e;
+        });
+        if (!found) updated.push(currentData);
+        return updated;
+      });
     } else {
-      setDraftProjects((prev) =>
-        prev.map((p) => (p.slug === currentSlug ? ({ ...p, ...currentData } as WorkProject) : p))
-      );
+      let found = false;
+      setDraftProjects((prev) => {
+        const updated = prev.map((p) => {
+          if (p.slug === targetSlug) {
+            found = true;
+            return { ...p, ...currentData };
+          }
+          return p;
+        });
+        if (!found) updated.push(currentData);
+        return updated.sort((a, b) => (a.order || 99) - (b.order || 99));
+      });
     }
-    setModifiedSlugs((prev) => new Set(prev).add(currentSlug));
+    setModifiedSlugs((prev) => new Set(prev).add(targetSlug));
   };
 
   const thumbnailFileInputRef = useRef<HTMLInputElement>(null);
@@ -415,16 +441,15 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   };
 
   const handleNewProject = () => {
-    if (editingSlug) {
-      commitCurrentProjectToDraft(editingSlug);
-    }
+    commitCurrentProjectToDraft(editingSlug);
     setEditingSlug(null);
     setTitle('');
     setSlug('');
-    setDate('2026');
+    setDate(new Date().getFullYear().toString());
     setMaterials('');
     setDimensions('');
-    setOrder(draftProjects.length + 1);
+    const maxOrder = draftProjects.reduce((max, p) => Math.max(max, Number(p.order) || 0), 0);
+    setOrder(maxOrder + 1);
     setExternalUrl('');
     setContent('');
     setThumbnail('');
@@ -494,33 +519,52 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     let finalProjects = [...draftProjects];
     let finalExperiences = [...draftExperiences];
 
-    if (editingSlug) {
+    const activeTitle = title.trim();
+    const activeSlug = (
+      editingSlug ||
+      slug.trim() ||
+      activeTitle.toLowerCase().replace(/[^a-z0-9가-힣\s-]/g, '').trim().replace(/\s+/g, '-')
+    ).trim();
+
+    let publishedProject: WorkProject | null = null;
+
+    if (activeSlug || activeTitle || thumbnail || detailImages.length > 0) {
+      const targetSlug = activeSlug || `project-${Date.now()}`;
       const currentProjectData: WorkProject = {
-        title: title.trim() || 'Untitled',
-        slug: editingSlug,
-        date,
+        title: activeTitle || 'Untitled',
+        slug: targetSlug,
+        date: date || '2026',
         thumbnail: thumbnail || '',
         images: detailImages,
         materials: materials || 'Aluminum Extrusions, Hardware',
         dimensions: dimensions || 'Various Dimensions',
         externalUrl: externalUrl || undefined,
-        order: Number(order) || 1,
+        order: Number(order) || (finalProjects.length + 1),
         content: content || '프로젝트 상세 내용입니다.',
       };
+      publishedProject = currentProjectData;
 
       const isExp =
         Number(order) >= 100 ||
-        isExperienceSlug(editingSlug) ||
-        finalExperiences.some((e) => e.slug === editingSlug);
+        isExperienceSlug(targetSlug) ||
+        finalExperiences.some((e) => e.slug === targetSlug);
 
       if (isExp) {
-        finalExperiences = finalExperiences.map((e) =>
-          e.slug === editingSlug ? { ...e, ...currentProjectData } : e
-        );
+        let found = false;
+        finalExperiences = finalExperiences.map((e) => {
+          if (e.slug === targetSlug) {
+            found = true;
+            return { ...e, ...currentProjectData };
+          }
+          return e;
+        });
+        if (!found) {
+          finalExperiences.push(currentProjectData);
+        }
       } else {
         let found = false;
         finalProjects = finalProjects.map((p) => {
-          if (p.slug === editingSlug) {
+          if (p.slug === targetSlug) {
             found = true;
             return { ...p, ...currentProjectData };
           }
@@ -529,7 +573,10 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
         if (!found) {
           finalProjects.push(currentProjectData);
         }
+        finalProjects.sort((a, b) => (a.order || 99) - (b.order || 99));
       }
+
+      setEditingSlug(targetSlug);
     }
 
     // 2. Save all projects and experiences in storage & cache
@@ -553,9 +600,8 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     onBatchUpdated?.(finalProjects, finalExperiences);
     onAboutUpdated(aboutForm);
     onResumeUpdated(resumeForm);
-    if (editingSlug) {
-      const currentP = [...finalProjects, ...finalExperiences].find((p) => p.slug === editingSlug);
-      if (currentP) onProjectAdded(currentP);
+    if (publishedProject) {
+      onProjectAdded(publishedProject);
     }
 
     setIsSaved(true);
