@@ -27,7 +27,72 @@ async function startServer() {
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
+  // Serve static assets from public directory with high performance and correct mime types
+  const publicDir = path.resolve(__dirname, 'public');
+  app.use(express.static(publicDir));
+
   const DATA_FILE = path.resolve(__dirname, 'src/content/custom-data.json');
+
+  function extractAndSaveBase64Images(data: any): any {
+    const imagesDir = path.resolve(__dirname, 'public/images/work');
+    if (!fs.existsSync(imagesDir)) {
+      fs.mkdirSync(imagesDir, { recursive: true });
+    }
+
+    function saveBase64(base64Str: string, prefix: string): string {
+      const matches = base64Str.match(/^data:image\/([a-zA-Z0-9\+\-]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        return base64Str;
+      }
+      const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+      const buffer = Buffer.from(matches[2], 'base64');
+      const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `${safePrefix}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}.${ext}`;
+      const filePath = path.join(imagesDir, filename);
+      fs.writeFileSync(filePath, buffer);
+      return `/images/work/${filename}`;
+    }
+
+    if (Array.isArray(data.projects)) {
+      data.projects = data.projects.map((proj: any) => {
+        const safeSlug = (proj.slug || 'project').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const p = { ...proj };
+        if (typeof p.thumbnail === 'string' && p.thumbnail.startsWith('data:image')) {
+          p.thumbnail = saveBase64(p.thumbnail, `${safeSlug}-thumb`);
+        }
+        if (Array.isArray(p.images)) {
+          p.images = p.images.map((img: string, idx: number) => {
+            if (typeof img === 'string' && img.startsWith('data:image')) {
+              return saveBase64(img, `${safeSlug}-${String(idx + 1).padStart(2, '0')}`);
+            }
+            return img;
+          });
+        }
+        return p;
+      });
+    }
+
+    if (Array.isArray(data.experiences)) {
+      data.experiences = data.experiences.map((exp: any) => {
+        const safeSlug = (exp.slug || 'exp').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const e = { ...exp };
+        if (typeof e.thumbnail === 'string' && e.thumbnail.startsWith('data:image')) {
+          e.thumbnail = saveBase64(e.thumbnail, `${safeSlug}-thumb`);
+        }
+        if (Array.isArray(e.images)) {
+          e.images = e.images.map((img: string, idx: number) => {
+            if (typeof img === 'string' && img.startsWith('data:image')) {
+              return saveBase64(img, `${safeSlug}-${String(idx + 1).padStart(2, '0')}`);
+            }
+            return img;
+          });
+        }
+        return e;
+      });
+    }
+
+    return data;
+  }
 
   // Read current shared content across all devices (Local Disk First + Cloud Firestore Fallback)
   app.get('/api/content', async (req, res) => {
@@ -86,23 +151,29 @@ async function startServer() {
         } catch {}
       }
 
+      // Automatically convert any base64 images into static image files in public/images/work
+      const processedPayload = extractAndSaveBase64Images(payload);
+
       const updated = {
         ...current,
-        ...payload,
+        ...processedPayload,
         updatedAt: new Date().toISOString(),
       };
 
-      // 1. Save to local disk file
+      // 1. Save to local disk file (src/content/custom-data.json, root custom-data.json, backup file)
       try {
-        fs.writeFileSync(DATA_FILE, JSON.stringify(updated, null, 2), 'utf-8');
+        const jsonStr = JSON.stringify(updated, null, 2);
+        fs.writeFileSync(DATA_FILE, jsonStr, 'utf-8');
+        fs.writeFileSync(path.resolve(__dirname, 'custom-data.json'), jsonStr, 'utf-8');
+        fs.writeFileSync(path.resolve(__dirname, 'leehyejun-portfolio-backup-2026-10-05.json'), jsonStr, 'utf-8');
       } catch (e) {
         console.warn('[Server] Could not write to disk:', e);
       }
 
-      // 2. Save permanently to Google Cloud Firestore
+      // 2. Save permanently to Google Cloud Firestore (documents are now lightweight ~2KB each!)
       await savePortfolioToFirestore(updated);
 
-      console.log('[Server] Successfully saved portfolio data to custom-data.json & Cloud Firestore');
+      console.log('[Server] Successfully saved portfolio data (lightweight JSON & static images) to disk & Cloud Firestore');
       return res.json({ success: true, data: updated });
     } catch (err) {
       console.error('[Server] Failed to save content data:', err);

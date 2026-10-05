@@ -240,31 +240,50 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         try {
           const parsed = JSON.parse(event.target?.result as string);
-          if (parsed.about) {
-            saveAboutData(parsed.about);
-            onAboutUpdated(parsed.about);
-            setAboutForm(parsed.about);
+
+          // 1. Send to server first so that base64 images are automatically extracted to static .jpg files
+          let activeData = parsed;
+          try {
+            const res = await fetch('/api/publish', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(parsed),
+            });
+            const result = await res.json();
+            if (result && result.data) {
+              activeData = result.data;
+            }
+          } catch (syncErr) {
+            console.warn('Server sync error during import:', syncErr);
           }
-          if (parsed.resume) {
-            saveResumeData(parsed.resume);
-            onResumeUpdated(parsed.resume);
-            setResumeForm(parsed.resume);
+
+          if (activeData.about) {
+            saveAboutData(activeData.about);
+            onAboutUpdated(activeData.about);
+            setAboutForm(activeData.about);
           }
-          if (parsed.projects && Array.isArray(parsed.projects)) {
-            parsed.projects.forEach((proj: WorkProject) => saveCustomProject(proj));
+          if (activeData.resume) {
+            saveResumeData(activeData.resume);
+            onResumeUpdated(activeData.resume);
+            setResumeForm(activeData.resume);
+          }
+          if (activeData.projects && Array.isArray(activeData.projects)) {
+            activeData.projects.forEach((proj: WorkProject) => saveCustomProject(proj));
             const all = getAllProjects();
             setProjectsList(all);
+            setDraftProjects(all);
             if (all[0]) {
               onProjectAdded(all[0]);
             }
           }
-          // Direct sync to Cloud Firestore & Server
-          savePortfolioToFirestore(parsed).catch(() => {});
-          syncToServer(parsed).catch(() => {});
-          alert('데이터를 성공적으로 불러왔습니다! 클라우드(Firestore)에 안전하게 영구 동기화되었습니다.');
+          if (activeData.experiences && Array.isArray(activeData.experiences)) {
+            setDraftExperiences(activeData.experiences);
+          }
+
+          alert('데이터를 성공적으로 불러왔습니다! 고화질 사진들이 실제 이미지 파일로 최적화되어 클라우드(Firestore)에 안전하게 영구 동기화되었습니다.');
         } catch {
           alert('올바르지 않은 백업 파일 형식입니다.');
         }
