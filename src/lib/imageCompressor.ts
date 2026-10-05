@@ -1,14 +1,13 @@
 /**
  * Smart image compressor for high-resolution web portfolio display.
- * Generates ultra-crisp Retina-ready images (up to 1920px) optimized to ~150KB-300KB,
- * ensuring seamless permanent storage in Cloud Firestore (under 1MB doc limit)
- * and blazing fast loading for portfolio visitors.
+ * Generates ultra-crisp Retina-ready images (up to 2560px) with high fidelity (quality 0.92),
+ * preserving razor-sharp product details, metal textures, and fine finishes.
  */
 
 export async function compressImageFile(
   file: File,
-  maxDimension = 1920,
-  quality = 0.85
+  maxDimension = 2560,
+  quality = 0.92
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -20,7 +19,7 @@ export async function compressImageFile(
         let width = img.width;
         let height = img.height;
 
-        // Scale proportionally if either dimension exceeds maxDimension
+        // Scale proportionally only if dimensions exceed maxDimension (2560px)
         if (width > maxDimension || height > maxDimension) {
           if (width > height) {
             height = Math.round((height * maxDimension) / width);
@@ -41,8 +40,8 @@ export async function compressImageFile(
           return;
         }
 
-        // Fill canvas with the warm gallery background (#FAF9F6) so transparent PNGs
-        // automatically blend with the site's background instead of turning black in JPEG conversion
+        // Fill canvas with warm gallery background (#FAF9F6) so transparent PNGs
+        // automatically blend with the site's background
         ctx.fillStyle = '#FAF9F6';
         ctx.fillRect(0, 0, width, height);
 
@@ -50,8 +49,8 @@ export async function compressImageFile(
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to high-quality JPEG for optimal clarity & compact size
-        const mimeType = file.type === 'image/png' && file.size < 800 * 1024 ? 'image/png' : 'image/jpeg';
+        // Convert to high-quality JPEG for crisp clarity
+        const mimeType = file.type === 'image/png' && file.size < 1.5 * 1024 * 1024 ? 'image/png' : 'image/jpeg';
         const dataUrl = canvas.toDataURL(mimeType, quality);
         resolve(dataUrl);
       };

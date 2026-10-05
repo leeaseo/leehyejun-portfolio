@@ -35,7 +35,9 @@ import {
   GripVertical,
   ChevronLeft,
   ChevronRight,
+  Crop,
 } from 'lucide-react';
+import { ImageCropperModal } from './ImageCropperModal';
 
 interface AdminPublishModalProps {
   isOpen?: boolean;
@@ -106,6 +108,23 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const [detailImages, setDetailImages] = useState<string[]>([]);
   const [newDetailUrl, setNewDetailUrl] = useState('');
   const [isCompressing, setIsCompressing] = useState(false);
+
+  // Image Cropper State
+  const [cropperState, setCropperState] = useState<{
+    isOpen: boolean;
+    type: 'thumbnail' | 'detail-new' | 'detail-edit';
+    imageSrc: string;
+    title: string;
+    subtitle?: string;
+    queue?: { rawSrc: string; file?: File }[];
+    queueIndex?: number;
+    detailEditIndex?: number;
+  }>({
+    isOpen: false,
+    type: 'thumbnail',
+    imageSrc: '',
+    title: '',
+  });
 
   // About Form states
   const [aboutForm, setAboutForm] = useState<AboutData>(getAboutData);
@@ -333,41 +352,142 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     }
   };
 
-  // Work 대표사진 파일 업로드 (자동 압축 처리)
-  const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Work 대표사진 파일 업로드 -> 크롭 모달 열기
+  const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      try {
-        setIsCompressing(true);
-        const compressedBase64 = await compressImageFile(file, 1920, 0.85);
-        setThumbnail(compressedBase64);
-      } catch (err) {
-        console.error('Failed to compress thumbnail:', err);
-        alert('이미지 처리 중 오류가 발생했습니다.');
-      } finally {
-        setIsCompressing(false);
-      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const rawSrc = event.target?.result as string;
+        if (rawSrc) {
+          setCropperState({
+            isOpen: true,
+            type: 'thumbnail',
+            imageSrc: rawSrc,
+            title: 'Work 대표사진 자르기 & 비율 조절',
+            subtitle: '메인 피드 카드에 노출될 대표 이미지',
+            queue: [{ rawSrc, file }],
+            queueIndex: 0,
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
     }
   };
 
-  // More 세부사진 파일 업로드 (자동 압축 처리)
+  // More 세부사진 파일 업로드 (여러 장 선택 지원) -> 크롭 큐 순차 처리
   const handleDetailImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
+      const queue: { rawSrc: string; file?: File }[] = [];
+      for (const file of Array.from(files)) {
+        const rawSrc = await new Promise<string>((res) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result as string);
+          r.readAsDataURL(file);
+        });
+        queue.push({ rawSrc, file });
+      }
+
+      if (queue.length > 0) {
+        setCropperState({
+          isOpen: true,
+          type: 'detail-new',
+          imageSrc: queue[0].rawSrc,
+          title: queue.length > 1 ? `세부사진 자르기 (1 / ${queue.length})` : '세부사진 자르기 & 비율 조절',
+          subtitle: '우측 Photos 세부 섹션에 노출될 사진',
+          queue,
+          queueIndex: 0,
+        });
+      }
+      e.target.value = '';
+    }
+  };
+
+  // 크롭 완료 콜백
+  const handleCropComplete = (croppedDataUrl: string) => {
+    if (cropperState.type === 'thumbnail') {
+      setThumbnail(croppedDataUrl);
+      setCropperState((prev) => ({ ...prev, isOpen: false }));
+    } else if (cropperState.type === 'detail-new') {
+      const currentQueue = cropperState.queue || [];
+      const currentIdx = cropperState.queueIndex || 0;
+      const nextIdx = currentIdx + 1;
+
+      setDetailImages((prev) => [...prev, croppedDataUrl]);
+
+      if (nextIdx < currentQueue.length) {
+        setCropperState((prev) => ({
+          ...prev,
+          imageSrc: currentQueue[nextIdx].rawSrc,
+          queueIndex: nextIdx,
+          title: `세부사진 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
+        }));
+      } else {
+        setCropperState((prev) => ({ ...prev, isOpen: false }));
+      }
+    } else if (cropperState.type === 'detail-edit') {
+      if (cropperState.detailEditIndex !== undefined) {
+        const editIdx = cropperState.detailEditIndex;
+        setDetailImages((prev) => {
+          const next = [...prev];
+          next[editIdx] = croppedDataUrl;
+          return next;
+        });
+      }
+      setCropperState((prev) => ({ ...prev, isOpen: false }));
+    }
+  };
+
+  // 크롭 건너뛰기 (원본 그대로 사용) 콜백
+  const handleCropSkip = async () => {
+    if (cropperState.type === 'thumbnail') {
+      const item = cropperState.queue?.[0];
       try {
         setIsCompressing(true);
-        const compressedList: string[] = [];
-        for (const file of Array.from(files)) {
-          const compressed = await compressImageFile(file, 1920, 0.85);
-          compressedList.push(compressed);
-        }
-        setDetailImages((prev) => [...prev, ...compressedList]);
+        const comp = item?.file
+          ? await compressImageFile(item.file, 2560, 0.92)
+          : cropperState.imageSrc;
+        setThumbnail(comp);
       } catch (err) {
-        console.error('Failed to compress detail images:', err);
-        alert('이미지 처리 중 오류가 발생했습니다.');
+        console.error(err);
+        setThumbnail(cropperState.imageSrc);
       } finally {
         setIsCompressing(false);
       }
+      setCropperState((prev) => ({ ...prev, isOpen: false }));
+    } else if (cropperState.type === 'detail-new') {
+      const currentQueue = cropperState.queue || [];
+      const currentIdx = cropperState.queueIndex || 0;
+      const item = currentQueue[currentIdx];
+      const nextIdx = currentIdx + 1;
+
+      try {
+        setIsCompressing(true);
+        const comp = item?.file
+          ? await compressImageFile(item.file, 2560, 0.92)
+          : item.rawSrc;
+        setDetailImages((prev) => [...prev, comp]);
+      } catch (err) {
+        console.error(err);
+        setDetailImages((prev) => [...prev, item.rawSrc]);
+      } finally {
+        setIsCompressing(false);
+      }
+
+      if (nextIdx < currentQueue.length) {
+        setCropperState((prev) => ({
+          ...prev,
+          imageSrc: currentQueue[nextIdx].rawSrc,
+          queueIndex: nextIdx,
+          title: `세부사진 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
+        }));
+      } else {
+        setCropperState((prev) => ({ ...prev, isOpen: false }));
+      }
+    } else {
+      setCropperState((prev) => ({ ...prev, isOpen: false }));
     }
   };
 
@@ -1419,20 +1539,56 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     🖼️ <strong>Work 대표사진</strong> (메인 피드 카드에 크게 노출될 대표 사진)
                   </span>
                   {thumbnail && (
-                    <button
-                      type="button"
-                      onClick={() => setThumbnail('')}
-                      className="text-[11px] text-red-600 hover:underline"
-                    >
-                      대표사진 삭제
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCropperState({
+                            isOpen: true,
+                            type: 'thumbnail',
+                            imageSrc: thumbnail,
+                            title: 'Work 대표사진 자르기 & 비율 조절',
+                            subtitle: '메인 피드 카드에 노출될 대표 이미지',
+                          });
+                        }}
+                        className="text-[11px] border border-[rgba(0,0,0,0.25)] bg-white px-2 py-0.5 hover:bg-neutral-100 flex items-center gap-1 cursor-pointer"
+                        title="대표사진 비율 조절 및 자르기"
+                      >
+                        <Crop size={11} />
+                        <span>자르기 / 비율 조정</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setThumbnail('')}
+                        className="text-[11px] text-red-600 hover:underline cursor-pointer"
+                      >
+                        대표사진 삭제
+                      </button>
+                    </div>
                   )}
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-start gap-3">
                   {thumbnail ? (
-                    <div className="w-24 h-32 border border-[rgba(0,0,0,0.2)] overflow-hidden shrink-0 bg-white">
+                    <div className="relative group w-24 h-32 border border-[rgba(0,0,0,0.2)] overflow-hidden shrink-0 bg-white">
                       <img src={thumbnail} alt="대표사진" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCropperState({
+                            isOpen: true,
+                            type: 'thumbnail',
+                            imageSrc: thumbnail,
+                            title: 'Work 대표사진 자르기 & 비율 조절',
+                            subtitle: '메인 피드 카드에 노출될 대표 이미지',
+                          });
+                        }}
+                        className="absolute inset-0 bg-black/60 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10.5px]"
+                        title="대표사진 크롭 / 비율 조정"
+                      >
+                        <Crop size={16} />
+                        <span className="mt-1">자르기</span>
+                      </button>
                     </div>
                   ) : (
                     <div className="w-24 h-32 border border-dashed border-[rgba(0,0,0,0.25)] flex flex-col items-center justify-center text-center p-2 text-[10px] text-[rgba(0,0,0,0.4)] shrink-0 bg-white">
@@ -1620,17 +1776,37 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                                 </button>
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setThumbnail(imgSrc);
-                                }}
-                                className="text-[9.5px] bg-white text-black px-1.5 py-0.5 font-normal hover:bg-neutral-200 cursor-pointer transition-colors shadow-xs"
-                                title="이 사진을 Work 대표사진으로 설정"
-                              >
-                                대표로 지정
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCropperState({
+                                      isOpen: true,
+                                      type: 'detail-edit',
+                                      imageSrc: imgSrc,
+                                      title: `세부사진 #${idx + 1} 자르기 & 비율 조절`,
+                                      subtitle: '선택한 세부 사진의 구도 및 비율 재조정',
+                                      detailEditIndex: idx,
+                                    });
+                                  }}
+                                  className="text-white bg-black/70 hover:bg-black p-1 cursor-pointer transition-colors"
+                                  title="이 사진 자르기 & 비율 조절"
+                                >
+                                  <Crop size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setThumbnail(imgSrc);
+                                  }}
+                                  className="text-[9.5px] bg-white text-black px-1.5 py-0.5 font-normal hover:bg-neutral-200 cursor-pointer transition-colors shadow-xs"
+                                  title="이 사진을 Work 대표사진으로 설정"
+                                >
+                                  대표로 지정
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -1715,6 +1891,21 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
           </div>
         )}
       </div>
+
+      {/* Image Crop & Aspect Ratio Modal */}
+      {cropperState.isOpen && (
+        <ImageCropperModal
+          isOpen={cropperState.isOpen}
+          imageSrc={cropperState.imageSrc}
+          title={cropperState.title}
+          subtitle={cropperState.subtitle}
+          currentIndex={cropperState.queueIndex}
+          totalCount={cropperState.queue?.length}
+          onClose={() => setCropperState((prev) => ({ ...prev, isOpen: false }))}
+          onCropComplete={handleCropComplete}
+          onSkip={handleCropSkip}
+        />
+      )}
     </div>
   );
 };
