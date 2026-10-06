@@ -80,18 +80,24 @@ export default function App() {
     }
   }, [mobileTab]);
 
-  // One-time automatic stale cache purge for visitors with old browser cache
+  // Robust check for stale placeholder data
+  const isStaleProjectData = (projs?: WorkProject[]): boolean => {
+    if (!projs || !Array.isArray(projs) || projs.length === 0) return true;
+    return projs.some(
+      (p) =>
+        p.title === 'Mobile Display System' ||
+        p.title?.includes('Seating for Doing Nothing') ||
+        p.title?.includes('05.fjkdljfklds') ||
+        p.title?.includes('ㅂㅇㅇㅈㄷ')
+    );
+  };
+
+  // Immediate purge of any stale browser cache on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem('leehyejun_custom_projects');
-        if (
-          raw &&
-          (raw.includes('Mobile Display System') ||
-            raw.includes('Seating for Doing Nothing at All') ||
-            raw.includes('05.fjkdljfklds') ||
-            raw.includes('ㅂㅇㅇㅈㄷ'))
-        ) {
+        if (raw && isStaleProjectData(JSON.parse(raw))) {
           localStorage.removeItem('leehyejun_custom_projects');
           localStorage.removeItem('leehyejun_custom_experiences');
           const fresh = getAllProjects();
@@ -105,16 +111,16 @@ export default function App() {
     }
   }, []);
 
-  // Load and sync content: 1) Server Content (Instant & Latest) -> 2) Cloud Firestore -> 3) Local Cache Fallback
+  // Load and sync content: 1) Server Content (if fresh) -> 2) Cloud Firestore (if fresh) -> 3) Bundled custom-data.json
   useEffect(() => {
     async function loadAllContent() {
-      // 1. PRIMARY: Fetch latest verified server data (Instant, accurate, with all latest titles and images)
+      // 1. PRIMARY: Fetch latest verified server data (only if not stale)
       try {
         const res = await fetch('/api/content');
         if (res.ok) {
           const data = await res.json();
           if (data) {
-            if (Array.isArray(data.projects) && data.projects.length > 0) {
+            if (Array.isArray(data.projects) && data.projects.length > 0 && !isStaleProjectData(data.projects)) {
               setProjectsList(data.projects);
               idbSet('leehyejun_custom_projects', data.projects).catch(() => {});
               try {
@@ -136,19 +142,20 @@ export default function App() {
         console.warn('[Server] Could not sync with /api/content:', err);
       }
 
-      // 2. SECONDARY: Fetch from Google Cloud Firestore (Realtime cloud database for all visitors)
+      // 2. SECONDARY: Fetch from Google Cloud Firestore (strictly ignore stale data)
       try {
         const firestoreData = await fetchPortfolioFromFirestore();
         if (
           firestoreData &&
           Array.isArray(firestoreData.projects) &&
-          firestoreData.projects.length > 0
+          firestoreData.projects.length > 0 &&
+          !isStaleProjectData(firestoreData.projects)
         ) {
           const fsProjects = firestoreData.projects;
           const workProjs = fsProjects.filter((p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100));
           const expProjs = fsProjects.filter((p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100));
 
-          if (workProjs.length > 0) {
+          if (workProjs.length > 0 && !isStaleProjectData(workProjs)) {
             setProjectsList(workProjs);
             idbSet('leehyejun_custom_projects', workProjs).catch(() => {});
             try {
@@ -170,14 +177,16 @@ export default function App() {
         console.warn('[Firestore] Client fetch:', err);
       }
 
-      // 3. FALLBACK: Synchronize local cache with bundled state
+      // 3. FALLBACK: Always ensure state is loaded with fresh bundled custom-data.json
       try {
         const bundled = getAllProjects();
         const bundledExp = getExperienceProjects();
         if (bundled.length > 0) {
+          setProjectsList(bundled);
           idbSet('leehyejun_custom_projects', bundled).catch(() => {});
         }
         if (bundledExp.length > 0) {
+          setExperienceProjectsList(bundledExp);
           idbSet('leehyejun_custom_experiences', bundledExp).catch(() => {});
         }
       } catch (err) {

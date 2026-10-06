@@ -118,6 +118,13 @@ function syncAndUnpackAll() {
     }
   }
 
+  if (data.about && data.about.profileImage && data.about.profileImage.startsWith('data:image')) {
+    const profilePath = path.resolve(rootDir, 'public/images/profile.jpg');
+    if (saveBase64ToFile(data.about.profileImage, profilePath)) {
+      data.about.profileImage = '/images/profile.jpg';
+    }
+  }
+
   // 4. Save synced data to src/content/custom-data.json and root custom-data.json
   const jsonStr = JSON.stringify(data, null, 2);
   fs.writeFileSync(targetDataFile, jsonStr, 'utf8');

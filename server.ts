@@ -134,14 +134,51 @@ async function startServer() {
     }
   });
 
-  // Full backup endpoint for downloading clean JSON
+  function convertPathsToStandaloneBase64(data: any): any {
+    const result = JSON.parse(JSON.stringify(data));
+    const pathToBase64 = (imgRelPath: string) => {
+      if (!imgRelPath || imgRelPath.startsWith('data:') || imgRelPath.startsWith('http')) return imgRelPath;
+      const cleanPath = imgRelPath.startsWith('/') ? imgRelPath.slice(1) : imgRelPath;
+      const fullPath = path.resolve(publicDir, cleanPath);
+      if (fs.existsSync(fullPath)) {
+        const ext = path.extname(fullPath).toLowerCase().replace('.', '') || 'jpeg';
+        const mime = ext === 'jpg' ? 'jpeg' : ext;
+        const buf = fs.readFileSync(fullPath);
+        return `data:image/${mime};base64,${buf.toString('base64')}`;
+      }
+      return imgRelPath;
+    };
+
+    if (Array.isArray(result.projects)) {
+      result.projects = result.projects.map((p: any) => ({
+        ...p,
+        thumbnail: pathToBase64(p.thumbnail),
+        images: Array.isArray(p.images) ? p.images.map(pathToBase64) : [],
+      }));
+    }
+    if (Array.isArray(result.experiences)) {
+      result.experiences = result.experiences.map((e: any) => ({
+        ...e,
+        thumbnail: pathToBase64(e.thumbnail),
+        images: Array.isArray(e.images) ? e.images.map(pathToBase64) : [],
+      }));
+    }
+    if (result.about && result.about.profileImage) {
+      result.about.profileImage = pathToBase64(result.about.profileImage);
+    }
+    return result;
+  }
+
+  // Full backup endpoint for downloading clean JSON with embedded photos for 1-click GitHub sync
   app.get('/api/backup-full', async (req, res) => {
     try {
       if (fs.existsSync(DATA_FILE)) {
-        const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+        const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+        const standalone = convertPathsToStandaloneBase64(raw);
+        const jsonStr = JSON.stringify(standalone, null, 2);
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', 'attachment; filename="custom-data.json"');
-        return res.send(raw);
+        return res.send(jsonStr);
       }
       return res.status(404).json({ error: 'No data file found' });
     } catch (err) {

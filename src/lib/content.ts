@@ -269,14 +269,30 @@ export function isExperienceSlug(slug?: string): boolean {
   );
 }
 
+function isStaleProjectList(projs?: WorkProject[]): boolean {
+  if (!projs || !Array.isArray(projs) || projs.length === 0) return true;
+  return projs.some(
+    (p) =>
+      p.title === 'Mobile Display System' ||
+      p.title?.includes('Seating for Doing Nothing') ||
+      p.title?.includes('05.fjkdljfklds') ||
+      p.title?.includes('ㅂㅇㅇㅈㄷ')
+  );
+}
+
 export function getCustomProjects(): WorkProject[] {
   let list: WorkProject[] = [];
-  // 1. Check in-memory cache first
-  if (memoryCustomProjects && memoryCustomProjects.length > 0) {
+  // 1. Check in-memory cache first (if not stale)
+  if (memoryCustomProjects && memoryCustomProjects.length > 0 && !isStaleProjectList(memoryCustomProjects)) {
     list = memoryCustomProjects;
   } else {
     // 2. Primary: Bundled custom-data.json (Git repository source of truth)
-    if ((customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects) && (customDataJson as any).projects.length > 0) {
+    if (
+      (customDataJson as any)?.projects &&
+      Array.isArray((customDataJson as any).projects) &&
+      (customDataJson as any).projects.length > 0 &&
+      !isStaleProjectList((customDataJson as any).projects)
+    ) {
       list = (customDataJson as any).projects;
       memoryCustomProjects = list;
     } else {
@@ -285,7 +301,7 @@ export function getCustomProjects(): WorkProject[] {
         const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_projects') : null;
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed) && parsed.length > 0 && !isStaleProjectList(parsed)) {
             memoryCustomProjects = parsed;
             list = parsed;
           }
