@@ -94,6 +94,17 @@ async function startServer() {
     return data;
   }
 
+  // Export full self-contained backup (includes all base64 encoded images)
+  app.get('/api/backup-full', (req, res) => {
+    const fullBackupPath = path.resolve(__dirname, 'leehyejun-full-standalone-backup.json');
+    if (fs.existsSync(fullBackupPath)) {
+      res.setHeader('Content-Disposition', 'attachment; filename="leehyejun-full-standalone-backup.json"');
+      res.setHeader('Content-Type', 'application/json');
+      return res.sendFile(fullBackupPath);
+    }
+    return res.status(404).json({ error: 'Backup file not found' });
+  });
+
   // Read current shared content across all devices (Local Disk First + Cloud Firestore Fallback)
   app.get('/api/content', async (req, res) => {
     try {

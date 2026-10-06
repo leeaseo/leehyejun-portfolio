@@ -239,11 +239,26 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const detailFileInputRef = useRef<HTMLInputElement>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleExportData = () => {
+  const handleExportData = async () => {
+    try {
+      const res = await fetch('/api/backup-full');
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `leehyejun-portfolio-full-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+    } catch {}
+
     const data = {
       about: getAboutData(),
       resume: getResumeData(),
       projects: getAllProjects(),
+      experiences: getExperienceProjects(),
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

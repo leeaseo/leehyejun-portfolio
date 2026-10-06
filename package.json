@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
+    "prebuild": "node scripts/unpack-images.cjs",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
