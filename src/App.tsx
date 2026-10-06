@@ -80,6 +80,31 @@ export default function App() {
     }
   }, [mobileTab]);
 
+  // One-time automatic stale cache purge for visitors with old browser cache
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('leehyejun_custom_projects');
+        if (
+          raw &&
+          (raw.includes('Mobile Display System') ||
+            raw.includes('Seating for Doing Nothing at All') ||
+            raw.includes('05.fjkdljfklds') ||
+            raw.includes('ㅂㅇㅇㅈㄷ'))
+        ) {
+          localStorage.removeItem('leehyejun_custom_projects');
+          localStorage.removeItem('leehyejun_custom_experiences');
+          const fresh = getAllProjects();
+          const freshExp = getExperienceProjects();
+          idbSet('leehyejun_custom_projects', fresh).catch(() => {});
+          idbSet('leehyejun_custom_experiences', freshExp).catch(() => {});
+          setProjectsList(fresh);
+          setExperienceProjectsList(freshExp);
+        }
+      } catch {}
+    }
+  }, []);
+
   // Load and sync content: 1) Server Content (Instant & Latest) -> 2) Cloud Firestore -> 3) Local Cache Fallback
   useEffect(() => {
     async function loadAllContent() {

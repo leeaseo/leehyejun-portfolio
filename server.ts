@@ -94,24 +94,16 @@ async function startServer() {
     return data;
   }
 
-  // Export full self-contained backup (includes all base64 encoded images)
-  app.get('/api/backup-full', (req, res) => {
-    const fullBackupPath = path.resolve(__dirname, 'leehyejun-full-standalone-backup.json');
-    if (fs.existsSync(fullBackupPath)) {
-      res.setHeader('Content-Disposition', 'attachment; filename="leehyejun-full-standalone-backup.json"');
-      res.setHeader('Content-Type', 'application/json');
-      return res.sendFile(fullBackupPath);
-    }
-    return res.status(404).json({ error: 'Backup file not found' });
-  });
+
 
   // Read current shared content across all devices (Local Disk First + Cloud Firestore Fallback)
   app.get('/api/content', async (req, res) => {
     try {
-      // 1. Read from local disk custom-data.json first
+      // 1. Read from local disk custom-data.json (Source of Truth)
       if (fs.existsSync(DATA_FILE)) {
         try {
-          const localData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+          const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+          const localData = JSON.parse(raw);
           if (localData && (localData.projects || localData.experiences)) {
             return res.json(localData);
           }
@@ -120,7 +112,7 @@ async function startServer() {
         }
       }
 
-      // 2. Fallback to Cloud Firestore
+      // 2. Fallback to Cloud Firestore ONLY if local file is empty or missing
       const firestoreData = await fetchPortfolioFromFirestore();
       if (firestoreData && Array.isArray((firestoreData as any).projects) && (firestoreData as any).projects.length > 0) {
         const allProjs = (firestoreData as any).projects;
@@ -132,18 +124,9 @@ async function startServer() {
           projects: workProjs,
           experiences: expProjs,
         };
-
-        try {
-          fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2), 'utf-8');
-        } catch {}
         return res.json(payload);
       }
 
-      // 2. Fallback to local custom-data.json
-      if (fs.existsSync(DATA_FILE)) {
-        const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-        return res.json(JSON.parse(raw));
-      }
       return res.json(null);
     } catch (err) {
       console.error('Failed to read content data:', err);
@@ -157,14 +140,10 @@ async function startServer() {
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf-8');
         res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Content-Disposition', 'attachment; filename="leehyejun-portfolio-backup.json"');
+        res.setHeader('Content-Disposition', 'attachment; filename="custom-data.json"');
         return res.send(raw);
       }
-      const firestoreData = await fetchPortfolioFromFirestore();
-      if (firestoreData) {
-        return res.json(firestoreData);
-      }
-      return res.status(404).json({ error: 'No backup data available' });
+      return res.status(404).json({ error: 'No data file found' });
     } catch (err) {
       return res.status(500).json({ error: 'Failed to generate backup' });
     }
