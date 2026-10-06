@@ -177,8 +177,21 @@ export const VisualFrame: React.FC<VisualFrameProps> = ({
     setHasError(false);
   }, [src]);
 
+  // Robust URL resolution for GitHub Pages / subpath hosting / root domains
+  const resolvedSrc = React.useMemo(() => {
+    if (!src) return '';
+    if (src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://') || src.startsWith('blob:')) {
+      return src;
+    }
+    const base = import.meta.env.BASE_URL || '/';
+    if (src.startsWith('/')) {
+      return base === '/' ? src : `${base.replace(/\/$/, '')}${src}`;
+    }
+    return src;
+  }, [src]);
+
   // If no src or failed to load
-  if (!src || hasError) {
+  if (!resolvedSrc || hasError) {
     return (
       <div className={`relative w-full overflow-hidden bg-[#F5F5F3] ${aspectClass} ${className}`}>
         {renderArchitecturalFallback()}
@@ -191,7 +204,7 @@ export const VisualFrame: React.FC<VisualFrameProps> = ({
     return (
       <div className={`relative w-full overflow-hidden bg-[#FAF9F6] ${className}`}>
         <img
-          src={src}
+          src={resolvedSrc}
           alt={alt}
           onError={() => setHasError(true)}
           className="w-full h-auto block object-contain transition-transform duration-300 group-hover:scale-[1.005] bg-[#FAF9F6]"
@@ -205,7 +218,7 @@ export const VisualFrame: React.FC<VisualFrameProps> = ({
   return (
     <div className={`relative w-full overflow-hidden bg-[#FAF9F6] ${aspectClass} ${className}`}>
       <img
-        src={src}
+        src={resolvedSrc}
         alt={alt}
         onError={() => setHasError(true)}
         className={`absolute inset-0 w-full h-full ${objectFit === 'cover' ? 'object-cover' : 'object-contain'} transition-transform duration-300 group-hover:scale-[1.01] bg-[#FAF9F6]`}

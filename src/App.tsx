@@ -111,45 +111,52 @@ export default function App() {
         console.warn('[Server] Could not sync with /api/content:', err);
       }
 
-      // 2. SECONDARY: Fetch from Google Cloud Firestore (only if newer than bundled data)
+      // 2. SECONDARY: Fetch from Google Cloud Firestore (Realtime cloud database for all visitors)
       try {
         const firestoreData = await fetchPortfolioFromFirestore();
-        const bundledExportTime = new Date('2026-10-04T22:43:34.858Z').getTime();
-        const firestoreExportTime = (firestoreData as any)?.exportedAt
-          ? new Date((firestoreData as any).exportedAt).getTime()
-          : 0;
-
-        // Only accept Firestore if it is strictly newer than the bundled git repository code
         if (
           firestoreData &&
-          firestoreExportTime > bundledExportTime &&
-          Array.isArray((firestoreData as any).projects) &&
-          (firestoreData as any).projects.length > 0
+          Array.isArray(firestoreData.projects) &&
+          firestoreData.projects.length > 0
         ) {
-          const fsProjects = (firestoreData as any).projects;
+          const fsProjects = firestoreData.projects;
           const workProjs = fsProjects.filter((p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100));
           const expProjs = fsProjects.filter((p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100));
 
-          if (workProjs.length > 0) setProjectsList(workProjs);
-          if (expProjs.length > 0) setExperienceProjectsList(expProjs);
-          if ((firestoreData as any).about) setAboutData((firestoreData as any).about);
-          if ((firestoreData as any).resume) setResumeData((firestoreData as any).resume);
+          if (workProjs.length > 0) {
+            setProjectsList(workProjs);
+            idbSet('leehyejun_custom_projects', workProjs).catch(() => {});
+            try {
+              localStorage.setItem('leehyejun_custom_projects', JSON.stringify(workProjs));
+            } catch {}
+          }
+          if (expProjs.length > 0) {
+            setExperienceProjectsList(expProjs);
+            idbSet('leehyejun_custom_experiences', expProjs).catch(() => {});
+            try {
+              localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(expProjs));
+            } catch {}
+          }
+          if (firestoreData.about) setAboutData(firestoreData.about);
+          if (firestoreData.resume) setResumeData(firestoreData.resume);
           return;
         }
       } catch (err) {
         console.warn('[Firestore] Client fetch:', err);
       }
 
-      // 3. FALLBACK: Only if bundled projects are empty
-      if (getAllProjects().length === 0) {
-        try {
-          const idbProjects = await idbGet<WorkProject[]>('leehyejun_custom_projects');
-          if (Array.isArray(idbProjects) && idbProjects.length > 0) {
-            setProjectsList(idbProjects);
-          }
-        } catch (err) {
-          console.warn('[Auto-Recovery] IDB check:', err);
+      // 3. FALLBACK: IndexedDB & LocalStorage cache
+      try {
+        const idbProjects = await idbGet<WorkProject[]>('leehyejun_custom_projects');
+        if (Array.isArray(idbProjects) && idbProjects.length > 0) {
+          setProjectsList(idbProjects);
         }
+        const idbExp = await idbGet<WorkProject[]>('leehyejun_custom_experiences');
+        if (Array.isArray(idbExp) && idbExp.length > 0) {
+          setExperienceProjectsList(idbExp);
+        }
+      } catch (err) {
+        console.warn('[Auto-Recovery] IDB check:', err);
       }
     }
 

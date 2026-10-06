@@ -19,6 +19,8 @@ export async function fetchPortfolioFromFirestore(): Promise<{
   projects?: WorkProject[];
   about?: any;
   resume?: any;
+  updatedAt?: string;
+  exportedAt?: string;
 } | null> {
   try {
     // 1. Fetch individual project documents from /projects
@@ -51,6 +53,8 @@ export async function fetchPortfolioFromFirestore(): Promise<{
         projects: projects.length > 0 ? projects : undefined,
         about: contentData?.about,
         resume: contentData?.resume,
+        updatedAt: contentData?.updatedAt,
+        exportedAt: contentData?.exportedAt || contentData?.updatedAt,
       };
     }
   } catch (err) {
@@ -66,6 +70,7 @@ export async function savePortfolioToFirestore(data: {
   resume?: any;
 }): Promise<boolean> {
   try {
+    const nowIso = new Date().toISOString();
     // 1. Save individual projects to /projects/{slug} collection (each doc gets its own 1MB budget!)
     const allProjs = [...(data.projects || []), ...(data.experiences || [])];
     if (allProjs.length > 0) {
@@ -74,7 +79,7 @@ export async function savePortfolioToFirestore(data: {
         const projRef = doc(db, 'projects', proj.slug);
         await setDoc(projRef, {
           ...proj,
-          updatedAt: new Date().toISOString(),
+          updatedAt: nowIso,
         });
       }
     }
@@ -82,7 +87,8 @@ export async function savePortfolioToFirestore(data: {
     // 2. Save global metadata to /content/portfolio
     const contentRef = doc(db, 'content', 'portfolio');
     const metaPayload: Record<string, any> = {
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
+      exportedAt: nowIso,
     };
     if (data.about) metaPayload.about = data.about;
     if (data.resume) metaPayload.resume = data.resume;
