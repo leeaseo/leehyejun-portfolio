@@ -145,18 +145,18 @@ export default function App() {
         console.warn('[Firestore] Client fetch:', err);
       }
 
-      // 3. FALLBACK: IndexedDB & LocalStorage cache
+      // 3. FALLBACK: Synchronize local cache with bundled state
       try {
-        const idbProjects = await idbGet<WorkProject[]>('leehyejun_custom_projects');
-        if (Array.isArray(idbProjects) && idbProjects.length > 0) {
-          setProjectsList(idbProjects);
+        const bundled = getAllProjects();
+        const bundledExp = getExperienceProjects();
+        if (bundled.length > 0) {
+          idbSet('leehyejun_custom_projects', bundled).catch(() => {});
         }
-        const idbExp = await idbGet<WorkProject[]>('leehyejun_custom_experiences');
-        if (Array.isArray(idbExp) && idbExp.length > 0) {
-          setExperienceProjectsList(idbExp);
+        if (bundledExp.length > 0) {
+          idbSet('leehyejun_custom_experiences', bundledExp).catch(() => {});
         }
       } catch (err) {
-        console.warn('[Auto-Recovery] IDB check:', err);
+        console.warn('[Cache] Sync error:', err);
       }
     }
 

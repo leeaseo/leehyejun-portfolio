@@ -10,19 +10,12 @@ import { DEFAULT_EXPERIENCE_PROJECTS } from './experienceData';
 let memoryCustomProjects: WorkProject[] | null = null;
 let memoryExperienceProjects: WorkProject[] | null = null;
 
-// Initialize from IndexedDB asynchronously on browser startup
-if (typeof window !== 'undefined') {
-  idbGet<WorkProject[]>('leehyejun_custom_projects').then((saved) => {
-    if (Array.isArray(saved) && saved.length > 0) {
-      memoryCustomProjects = saved;
-    }
-  }).catch(() => {});
-
-  idbGet<WorkProject[]>('leehyejun_custom_experiences').then((saved) => {
-    if (Array.isArray(saved) && saved.length > 0) {
-      memoryExperienceProjects = saved;
-    }
-  }).catch(() => {});
+// Primary initialization from bundled custom-data.json (Git repository source of truth)
+if ((customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects)) {
+  memoryCustomProjects = (customDataJson as any).projects;
+}
+if ((customDataJson as any)?.experiences && Array.isArray((customDataJson as any).experiences)) {
+  memoryExperienceProjects = (customDataJson as any).experiences;
 }
 
 // Load MDX raw strings at build/bundle time via Vite eager glob
@@ -364,9 +357,16 @@ export function deleteCustomProject(slug: string): void {
 }
 
 export function getAllProjects(): WorkProject[] {
-  const projectsMap = new Map<string, WorkProject>();
+  // 1. Primary: Bundled and custom projects list
+  const custom = getCustomProjects();
+  if (Array.isArray(custom) && custom.length > 0) {
+    return custom
+      .filter((p): p is WorkProject => Boolean(p && p.slug && !isExperienceSlug(p.slug) && (!p.order || p.order < 100)))
+      .sort((a, b) => (a.order || 99) - (b.order || 99));
+  }
 
-  // 1. Seed with bundled MDX files
+  // 2. Fallback: Seed with bundled MDX files only if no custom-data exists
+  const projectsMap = new Map<string, WorkProject>();
   for (const [path, rawContent] of Object.entries(workModules)) {
     const { frontmatter, content } = parseFrontmatter<Partial<WorkProject>>(rawContent);
     const slugFromPath = path.split('/').pop()?.replace('.mdx', '') || '';
@@ -375,7 +375,7 @@ export function getAllProjects(): WorkProject[] {
       projectsMap.set(slug, {
         title: frontmatter.title || 'Untitled Project',
         slug,
-        date: frontmatter.date || '2025',
+        date: frontmatter.date || '2026',
         thumbnail: frontmatter.thumbnail || '',
         images: frontmatter.images || [],
         materials: frontmatter.materials || 'Aluminum, Steel',
@@ -384,24 +384,6 @@ export function getAllProjects(): WorkProject[] {
         order: typeof frontmatter.order === 'number' ? frontmatter.order : 99,
         content: content,
       });
-    }
-  }
-
-  // 2. Overlay / add custom projects by slug (custom projects take precedence)
-  const custom = getCustomProjects();
-  if (Array.isArray(custom)) {
-    for (const cp of custom) {
-      if (!cp || !cp.slug) continue;
-      let matchedKey = cp.slug;
-      if (!projectsMap.has(cp.slug)) {
-        for (const [k, p] of projectsMap.entries()) {
-          if (p.title && cp.title && p.title.trim().toLowerCase() === cp.title.trim().toLowerCase()) {
-            matchedKey = k;
-            break;
-          }
-        }
-      }
-      projectsMap.set(matchedKey, cp);
     }
   }
 
