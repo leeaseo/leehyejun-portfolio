@@ -81,6 +81,14 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
 
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => {
+      setToastMsg((cur) => (cur === msg ? null : cur));
+    }, 4500);
+  };
 
   // Main Section Tabs: 'work' | 'about' | 'resume'
   const [mainSection, setMainSection] = useState<'work' | 'about' | 'resume'>('work');
@@ -247,9 +255,10 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `leehyejun-portfolio-full-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        link.download = `custom-data.json`;
         link.click();
         URL.revokeObjectURL(url);
+        showToast('✅ custom-data.json이 다운로드되었습니다. 깃허브 저장소(GitHub)에 업로드하시면 사이트에 자동 연동됩니다.');
         return;
       }
     } catch {}
@@ -265,9 +274,10 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `leehyejun-portfolio-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `custom-data.json`;
     link.click();
     URL.revokeObjectURL(url);
+    showToast('✅ custom-data.json이 다운로드되었습니다. 깃허브 저장소(GitHub)에 업로드하시면 사이트에 자동 연동됩니다.');
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1873,11 +1883,25 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
           )}
         </div>
 
+        {/* Toast Notification Banner */}
+        {toastMsg && (
+          <div className="mx-5 mb-3 p-3 bg-neutral-900 text-white text-[12px] flex items-center justify-between shadow-lg">
+            <span>{toastMsg}</span>
+            <button
+              type="button"
+              onClick={() => setToastMsg(null)}
+              className="text-neutral-400 hover:text-white ml-3 text-[11px] underline cursor-pointer"
+            >
+              닫기
+            </button>
+          </div>
+        )}
+
         {/* Discreet Data Sync & Transfer Bar (내보내기 / 불러오기) */}
         {isAuthenticated && (
           <div className="px-5 py-2.5 bg-neutral-50 border-t border-[rgba(0,0,0,0.1)] flex flex-wrap items-center justify-between text-[11px] text-[rgba(0,0,0,0.6)]">
             <div className="flex items-center gap-1.5">
-              <span>💡 다른 컴퓨터로 옮기거나 백업할 때:</span>
+              <span>💡 깃허브 연동 또는 전체 백업:</span>
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -1898,9 +1922,10 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               <button
                 type="button"
                 onClick={handleExportData}
-                className="underline hover:text-black cursor-pointer font-medium"
+                className="underline hover:text-black cursor-pointer font-medium text-black font-semibold"
+                title="다운로드된 custom-data.json을 깃허브 저장소에 업로드하시면 사이트에 즉시 반영됩니다"
               >
-                [전체 데이터 백업 (Export)]
+                [깃허브 연동용 custom-data.json 백업 다운로드]
               </button>
             </div>
           </div>

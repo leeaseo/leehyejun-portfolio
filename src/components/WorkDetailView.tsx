@@ -95,8 +95,8 @@ export const WorkDetailView: React.FC<WorkDetailViewProps> = ({
         <MdxContent content={project.content} />
       </div>
 
-      {/* External Link */}
-      {project.externalUrl && (
+      {/* External Link (Only for experience/award references) */}
+      {((project.order && project.order >= 100) || project.slug?.includes('poing')) && project.externalUrl && (
         <div className="mt-8 pt-6 border-t border-[rgba(0,0,0,0.15)]">
           <a
             href={project.externalUrl}

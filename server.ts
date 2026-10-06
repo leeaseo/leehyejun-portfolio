@@ -151,6 +151,25 @@ async function startServer() {
     }
   });
 
+  // Full backup endpoint for downloading clean JSON
+  app.get('/api/backup-full', async (req, res) => {
+    try {
+      if (fs.existsSync(DATA_FILE)) {
+        const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', 'attachment; filename="leehyejun-portfolio-backup.json"');
+        return res.send(raw);
+      }
+      const firestoreData = await fetchPortfolioFromFirestore();
+      if (firestoreData) {
+        return res.json(firestoreData);
+      }
+      return res.status(404).json({ error: 'No backup data available' });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to generate backup' });
+    }
+  });
+
   // Save updated content (persists across PC, Mobile, and all visitors worldwide)
   app.post('/api/publish', async (req, res) => {
     try {

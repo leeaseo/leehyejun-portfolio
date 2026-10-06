@@ -92,9 +92,9 @@
   },
   "projects": [
     {
-      "title": "Mobile Display System",
+      "title": "YEONHUI SHOWROOM - THE LAYER",
       "slug": "mobile-display-system",
-      "date": 2025,
+      "date": "2026",
       "thumbnail": "/images/work/mobile-display-system-thumb.jpg",
       "images": [
         "/images/work/mobile-display-system-01.jpg",
@@ -110,22 +110,16 @@
         "/images/work/mobile-display-system-11.jpg",
         "/images/work/mobile-display-system-12.jpg"
       ],
-      "materials": "Aluminum Extrusions, Stainless Steel Hardware",
-      "dimensions": "Various Dimensions",
-      "externalUrl": "https://leehyejun.com/work/mobile-display-system",
+      "materials": "Solid Oak, Micro-cement, Natural Linen, Indirect Lighting",
+      "dimensions": "Total 165㎡ (B1F - 2F)",
       "order": 1,
-      "content": "This project was designed and built for The New School alongside Ryan Mo.\n\nFor this project, the client requested a mobile and modular system for the display of merchandise that could collapse and deploy within any given space. Our approach focused on the development of various modules each fulfilling a different need. These modules include shelving, clothing racks, mirrors, tables, platforms, and a point of sale. Deployed together, the space assumes the function of a complete retail environment supporting the displaying and shopping of an assortment of goods.\n\nThe most critical design challenge was collapsing this complete retail environment into an easily mobile and deployable system. For the client, this meant it must be transported and deployed by a single person. This resulted in strict size and weight constraints.\n\nOur solution turns the point of sale module into a means of transportation, where it becomes a cart-like structure, onto which the other modules are collapsed and stacked, allowing the full system to fit through doors and hallways, and inside any standard elevator. This 3ft x 3ft x 6ft package deploys to fill a space up to roughly 500sq ft. It is an entire store on wheels.\n\nImportantly, this process of transportation and deployment should be easy and simple. It is very intentionally not a process of assembly or construction. All interaction is reduced to simple gestures like turning, folding, snapping, setting, etc. There are no tools required, and the entire process can be completed by a single individual in a matter of minutes with very little explanation.\n\nPhotographed by Colin Padulo in addition to Ryan and Myself."
+      "content": "### 프로젝트 개요\n**Location** : 서울특별시 서대문구 연희로11라길 7\n**Role** : 공간 기획, 인테리어 설계 및 시공 감리, 가구 큐레이션 & VMD/DP 총괄\n**Scope** :\n- 콘셉트 도출 및 공간 조닝(Zoning) 기획\n- 평면 레이아웃 및 3D 모델링 제작\n- 현장 시공 감리 및 마감재/조명 디테일 조율\n- 가구 라인업 매칭 및 구성, 오브제 스타일링 및 최종 VMD 연출\n\n### 기획 배경 및 콘셉트\n\"THE LAYER — 일상의 온기와 장면이 켜켜이 쌓이는 공간\"\n\n단순히 가구를 나열해 판매하는 전형적인 가구 전시장을 탈피하여, 일상의 순간들이 자연스럽게 레이어드되는 '실제 주거의 정서'를 담아냈습니다. 연희동 특유의 차분하고 고즈넉한 주택가 분위기와 브랜드의 원목 아이덴티티가 유기적으로 이어지도록 기획했습니다.\n\n### 디자인 방향성\n- **뉴트럴 텍스처와 원목의 조화**: 원목이 가진 본연의 따뜻함과 조화를 이루는 뉴트럴 톤의 미장 및 텍스처 선정\n- **자연광과 조도 계획**: 자연광의 흐름을 고려한 창호 및 인공조명의 섬세한 조도 계획\n- **실제 주거 씬(Scene) 중심의 공간 구성**: 리빙, 다이닝, 워크스페이스 등 실제 주거의 순간들이 자연스럽게 펼쳐지는 동선 기획"
     },
     {
-      "externalUrl": "https://leehyejun.com/work/seating-for-doing-nothing",
-      "updatedAt": "2026-10-04T22:29:06.784Z",
-      "content": "## 개념 및 의도 (Concept & Intent)\n\n생산성과 효율성만을 강요하는 현대의 인체공학 가구 패러다임에 반문하는 라운지 구조물입니다. 신체가 특정 자세를 강요받지 않고, 중력에 몸을 맡긴 채 온전히 무위(Nothing)의 상태로 휴식할 수 있도록 설계되었습니다.\n\n### 구조적 특성 (Structural Features)\n\n- **캔틸레버 서스펜션**: 탄성 계수가 정밀 계산된 스틸 인장 스프링과 6061 튜브 프레임이 사용자의 체중에 맞춰 유연하게 반응합니다.\n- **파라코드 인터레이싱**: 밀리터리 규격 나일론 파라코드를 핸드 우븐 방식으로 직조하여 통기성과 균등한 체압 분산을 실현했습니다.\n- **비정형 폴리우레탄 폼**: 접촉면의 경도를 3단계로 차등화하여 장시간 누워 있어도 피로감을 주지 않습니다.",
-      "materials": "6061 Aluminum, Polyurethane, Steel Springs, Paracord",
-      "title": "Seating for Doing Nothing at All",
-      "order": 2,
-      "thumbnail": "/images/work/seating-for-doing-nothing-thumb.jpg",
-      "date": 2025,
+      "title": "HANASI SOFA 05",
       "slug": "seating-for-doing-nothing",
+      "date": "2026",
+      "thumbnail": "/images/work/seating-for-doing-nothing-thumb.jpg",
       "images": [
         "/images/work/seating-for-doing-nothing-01.jpg",
         "/images/work/seating-for-doing-nothing-02.jpg",
@@ -139,16 +133,16 @@
         "/images/work/seating-for-doing-nothing-10.jpg",
         "/images/work/seating-for-doing-nothing-11.jpg"
       ],
-      "dimensions": "36” × 72” × 32”"
+      "materials": "White Oak (화이트오크 원목), High-density Foam, Easy-clean Fabric",
+      "dimensions": "3인: 2000 × 850 × 720 mm / 1인: 850 × 850 × 720 mm",
+      "order": 2,
+      "content": "### 프로젝트 개요\n**Category** : Living Furniture (1-Person & 3-Person Fabric Sofa)\n**Role** : 가구 기획 및 디자인 개발, 구조 도면 설계, 1:1 프로토타입 감리 및 양산 총괄\n**Scope** :\n- 한국 거실 공간의 비례감을 고려한 등받이 비율 기획\n- 1인 및 3인 모듈 라인업 구성\n- 원목 솔리드 프레임 결구 구조 및 다리 디테일 설계\n- 고밀도 폼과 이지클린 기능성 패브릭 큐레이션 및 착석감 튜닝\n\n### 기획 배경 및 콘셉트\n\"HANASI 05 — 비워낸 나무의 여백과 안온한 패브릭의 만남\"\n\n거실 중앙에 배치되었을 때도 시야를 가리지 않고 공간을 개방감 있게 확장해 주는 낮고 단정한 실루엣의 원목 소파입니다. 하나시 컬렉션 특유의 동양적이고 정갈한 선을 바탕으로, 앞모습뿐만 아니라 벽에서 떨어져 노출되는 뒷모습과 옆모습까지 하나의 완성도 높은 오브제로 기능하도록 기획했습니다.\n\n### 디자인 방향성\n- **단정한 후면 원목 루버 구조**: 뒷공간이 트인 거실 레이아웃에서도 아름다운 공간 분할선이 되도록 세밀한 간격의 원목 살대 구조 적용\n- **로우 & 와이드 프로포션**: 좌면 높이를 안정감 있게 낮추고 깊이감을 확보하여 장시간 편안하게 몸을 기댈 수 있는 휴식성 확보\n- **모듈 확장성**: 3인 소파와 1인 소파의 조화로운 매칭을 통해 공간 규모와 라이프스타일에 맞춘 유연한 거실 씬(Scene) 구성"
     },
     {
-      "externalUrl": "https://leehyejun.com/work/modular-adapter",
-      "date": 2024,
-      "thumbnail": "/images/work/modular-adapter-thumb.jpg",
+      "title": "HANASI SOFA TABLE 03",
       "slug": "modular-adapter",
-      "materials": "Anodized Aluminum, Electronics",
-      "order": 3,
-      "title": "Modular Adapter System",
+      "date": "2026",
+      "thumbnail": "/images/work/modular-adapter-thumb.jpg",
       "images": [
         "/images/work/modular-adapter-01.jpg",
         "/images/work/modular-adapter-02.jpg",
@@ -166,18 +160,16 @@
         "/images/work/modular-adapter-14.jpg",
         "/images/work/modular-adapter-15.jpg"
       ],
-      "dimensions": "Various Dimensions",
-      "updatedAt": "2026-10-04T22:29:06.864Z",
-      "content": "## 개요 (Overview)\n\n모듈러 어댑터 시스템은 다양한 규격의 디바이스와 카메라 리그, 외장 배터리팩, 센서 유닛을 상호 호환시키는 퀵 체인지 플랫폼입니다. Arca-Swiss 규격 및 NATO 레일 표준과 100% 기계적 호환을 제공합니다.\n\n### 기계적 메커니즘 (Mechanical Integrity)\n\n극한의 진동 환경에서도 완벽한 잠금을 보장하기 위해 듀얼 스테이지 세이프티 핀을 내장했습니다. 손가락 한 번의 가벼운 슬라이드 동작으로 부품을 교체할 수 있으면서도, 불시의 이탈 사고를 원천 차단합니다.\n\n- **기계적 허용 오차**: ±0.01mm 초정밀 공차 가공\n- **접촉면 보호**: 고밀도 폼 실리콘 패딩 적용으로 장비 체결면 스크래치 방지\n- **마감 옵션**: Deep Matte Graphite Black PVD 코팅"
+      "materials": "White Oak (화이트오크 원목), Tempered Glass / Satin Frosted Glass / Oak Veneer",
+      "dimensions": "1200(W) × 600(D) × 350(H) mm",
+      "order": 3,
+      "content": "### 프로젝트 개요\n**Category** : Living Furniture (Center Table / Coffee Table)\n**Role** : 가구 기획 및 디자인 개발, 소재별(유리/사틴/우드) 상판 결구 도면 설계, 양산 감리\n**Scope** :\n- 3가지 상판 옵션(투명유리 / 사틴유리 / 합판) 구조 설계\n- 하부 수납 선반과 원목 다리의 간결한 연결 조인트 기획\n- 소파 좌면 높이와 조화를 이루는 로우 테이블 비례 세팅\n- 투명도와 질감에 따른 거실 공간 분위기 연출성 검증\n\n### 기획 배경 및 콘셉트\n\"HANASI 03 — 빛과 그림자가 투과되는 여백의 테이블\"\n\n거실의 중심에서 소파와 러그 사이를 부드럽게 이어주는 로우 소파테이블입니다. 하나시 컬렉션의 정갈한 직선미를 계승하면서도 상판 소재의 다양성을 통해 공간의 무드를 사용자의 취향에 맞게 선택할 수 있도록 설계했습니다.\n\n### 디자인 방향성\n- **3-Type 커스텀 상판 시스템**: 시원한 개방감의 클리어 투명유리, 은은하고 차분한 빛의 산란을 주는 사틴유리, 따뜻한 원목 감성의 우드 합판 상판 3종 라인업 전개\n- **하부 오픈 수납 선반**: 리모컨, 매거진, 북 등 자주 쓰는 소품을 깔끔하게 정돈할 수 있는 하부 선반 구조 적용\n- **간결하고 견고한 오크 원목 프레임**: 군더더기 없는 슬림한 선을 유지하면서도 일상적 하중을 견고하게 지지하는 정밀 결구 적용"
     },
     {
-      "updatedAt": "2026-10-04T22:29:06.946Z",
-      "date": "2026",
+      "title": "HANASI TABLE 13",
       "slug": "0",
-      "content": "fdfdfdf",
-      "dimensions": "Various Dimensions",
-      "order": 4,
-      "title": "05.fjkdljfklds",
+      "date": "2026",
+      "thumbnail": "/images/work/0-thumb.jpg",
       "images": [
         "/images/work/0-01.jpg",
         "/images/work/0-02.jpg",
@@ -191,13 +183,15 @@
         "/images/work/0-10.jpg",
         "/images/work/0-11.jpg"
       ],
-      "materials": "fdfdsfdsfdsfdsfdsf",
-      "thumbnail": "/images/work/0-thumb.jpg"
+      "materials": "White Oak (화이트오크 원목), Italian Porcelain Ceramic Top (포세린 세라믹)",
+      "dimensions": "1600 / 1800 / 2000(W) × 850(D) × 740(H) mm",
+      "order": 4,
+      "content": "### 프로젝트 개요\n**Category** : Dining & Workspace Furniture (Porcelain Ceramic Dining Table)\n**Role** : 테이블 구조 기획, 세라믹-원목 이종 소재 결합 설계, 하중 분산 하부 구조 감리\n**Scope** :\n- 프리미엄 이태리 포세린 세라믹 상판 선정 및 가공 규격 설정\n- 원목 수축 팽창에 대응하는 플로팅 하부 프레임 메커니즘 설계\n- 다리 안쪽 사선 각도 설계를 통한 넉넉한 착석 레그룸 확보\n- 4인(1600), 6인(1800/2000) 공간 맞춤형 사이즈 라인업 구축\n\n### 기획 배경 및 콘셉트\n\"HANASI 13 — 포세린의 완전한 실용성과 오크 원목의 온기\"\n\n스크래치와 열, 오염에 강한 기능성 포세린 세라믹 상판에 화이트오크 원목의 정갈한 결구를 접목한 하이엔드 다이닝 테이블입니다. 차가운 세라믹과 따뜻한 원목의 물성이 이질감 없이 조화를 이루도록 원목 다리의 곡률과 면취(Chamfer) 디테일을 극대화했습니다.\n\n### 디자인 방향성\n- **슬림 플로팅 상판 디테일**: 상판이 프레임 위에 가볍게 떠 있는 듯한 시각적 부유감을 주어 세라믹의 묵직함을 경쾌하고 모던하게 승화\n- **인체공학적 레그룸 구조**: 의자를 넣고 뺄 때 간섭을 최소화하고, 무릎과 다리가 닿지 않도록 다리 상단과 에이프런(Apron)을 슬림하게 정돈\n- **오랜 세월을 견디는 고내구성 설계**: 1,200℃ 이상에서 고압 소결된 포세린 상판으로 칼질, 뜨거운 냄비, 국물 이염 걱정 없는 일상 관리 편의성 제공"
     },
     {
-      "title": "Tactile Field Controller",
+      "title": "BELLINA SOFA 04",
       "slug": "tactile-interface",
-      "date": 2024,
+      "date": "2026",
       "thumbnail": "/images/work/tactile-interface-thumb.jpg",
       "images": [
         "/images/work/tactile-interface-01.jpg",
@@ -213,14 +207,13 @@
         "/images/work/tactile-interface-11.jpg",
         "/images/work/tactile-interface-12.jpg"
       ],
-      "materials": "Polycarbonate, Sandcast Aluminum, Custom Rotary Encoders",
-      "dimensions": "165 × 92 × 24 mm",
-      "externalUrl": "https://leehyejun.com/work/tactile-interface",
+      "materials": "Solid Hardwood Frame, High-Resilience Foam, Textured Fabric",
+      "dimensions": "3인: 2150 × 960 × 750 mm / 1인: 1000 × 960 × 750 mm",
       "order": 5,
-      "content": "## 개요 (Overview)\n\n디지털 화면만을 터치하는 현대 제어 인터페이스의 물리적 한계를 극복하기 위해 제작된 필드 컨트롤러입니다. 장갑을 낀 상태나 시각적 주의가 다른 곳으로 분산된 가혹한 작업 환경에서도 즉각적인 촉각 피드백(Tactile Click)과 미세 회전 토크를 제공합니다.\n\n### 인터랙션 설계 (Interaction Architecture)\n\n- **스텝 휠 인코더**: 24-스텝 마그네틱 멈춤 래칫 메커니즘\n- **저전력 모노크롬 OLED**: 직사광선 아래에서도 100% 식별 가능한 고대비 디스플레이\n- **인체공학적 그립**: 손의 곡면 압력 분포를 분석하여 최적화된 비대칭 외형 구조"
+      "content": "### 프로젝트 개요\n**Category** : Living Furniture (Curved & Volumetric Fabric Sofa)\n**Role** : 소프트 볼륨 폼 패턴 개발, 팔걸이 곡면 봉제 라인 설계, 착석감 및 텐션 튜닝\n**Scope** :\n- 인체 굴곡을 감싸는 라운드 등받이 곡률 및 볼륨 모델링\n- 장시간 착석 시에도 꺼짐 없는 고탄성 복합 레이어 폼 설계\n- 내구성 높은 프리미엄 텍스처 패브릭 큐레이션\n- 단독 3인 구성 및 1인 암체어와의 유기적인 매칭 연출\n\n### 기획 배경 및 콘셉트\n\"BELLINA 04 — 부드러운 곡선이 주는 시각적 포근함과 깊은 휴식\"\n\n공간에 부드러운 유기적 리듬감을 불어넣는 라운드 실루엣의 패브릭 소파입니다. 직선 위주의 현대 주거 공간에서 모서리를 부드럽게 감싸 안는 곡선형 디자인을 통해 공간의 시각적 긴장감을 완화하고, 구름 위에 앉은 듯한 안락한 휴식을 제공합니다.\n\n### 디자인 방향성\n- **일체형 라운드 쿠셔닝**: 등받이에서 팔걸이로 자연스럽게 이어지는 완만한 곡면 일체형 구조로 어느 각도에서도 유려한 심미성 확보\n- **딥 시팅(Deep Seating) 구조**: 넉넉한 깊이감으로 다리를 올리거나 눕는 등 자유로운 휴식 자세를 수용하는 라운지 레이아웃\n- **모던 뉴트럴 텍스처**: 빛의 각도에 따라 입체감을 더하는 고급 패브릭 직조로 거실 전체에 깊이감 있는 질감 부여"
     },
     {
-      "title": "ㅂㅇㅇㅈㄷ",
+      "title": "HANASI SOFA TABLE 04",
       "slug": "project-1791238590387",
       "date": "2026",
       "thumbnail": "/images/work/project-1791238590387-thumb.jpg",
@@ -240,13 +233,13 @@
         "/images/work/project-1791238590387-13.jpg",
         "/images/work/project-1791238590387-14.jpg"
       ],
-      "materials": "Aluminum Extrusions, Hardware",
-      "dimensions": "Various Dimensions",
+      "materials": "North American Walnut / White Oak / Black Finished Oak",
+      "dimensions": "1100(W) × 550(D) × 360(H) mm",
       "order": 6,
-      "content": "프로젝트 상세 내용입니다."
+      "content": "### 프로젝트 개요\n**Category** : Living Furniture (Solid Wood Low Coffee Table)\n**Role** : 3대 수종(월넛/오크/블랙) 피니시 기획, 모서리 라운딩 가공 및 구조 설계\n**Scope** :\n- 수종별(월넛·화이트오크·블랙오크) 마감재 발색 및 샌딩 퀄리티 감리\n- 얇은 원목 상판의 휨 방지를 위한 하부 철물 보강 구조 설계\n- 바닥면과 접하는 다리 라인의 테이퍼드(Tapered) 디테일 개발\n- 소형 평수부터 대형 거실까지 아우르는 콤팩트 와이드 비례 구현\n\n### 기획 배경 및 콘셉트\n\"HANASI 04 — 나무 본연의 나뭇결과 묵직한 조형미의 균형\"\n\n최고급 하드우드의 아름다운 나뭇결을 오롯이 느낄 수 있는 슬림 & 솔리드 소파테이블입니다. 공간의 톤앤매너에 맞추어 깊이 있는 월넛, 화사한 내추럴 오크, 모던하고 시크한 블랙 오크 중 선택할 수 있도록 3종의 아이덴티티를 확립했습니다.\n\n### 디자인 방향성\n- **3가지 시그니처 컬러웨이**: 자연스러운 붉은기와 짙은 브라운이 고급스러운 월넛, 밝고 온화한 오크, 나뭇결이 은은하게 드러나는 매트 블랙 피니시\n- **섬세한 에지(Edge) 가공**: 손이 닿는 상판 가장자리를 부드러운 라운드로 가공하여 안전성과 감성적인 터치감 동시 확보\n- **단단하고 안정적인 다리 프레임**: 상판 하부로 안정감 있게 뻗어나가는 다리 각도 설계를 통해 흔들림 없는 완벽한 구조적 안정성 실현"
     },
     {
-      "title": "ㅅㄱㄷ",
+      "title": "HANASI CHAIR 13 & 14",
       "slug": "project-1791239900307",
       "date": "2026",
       "thumbnail": "/images/work/project-1791239900307-thumb.jpg",
@@ -269,13 +262,13 @@
         "/images/work/project-1791239900307-16.jpg",
         "/images/work/project-1791239900307-17.jpg"
       ],
-      "materials": "Aluminum Extrusions, Hardware",
-      "dimensions": "Various Dimensions",
+      "materials": "White Oak (화이트오크 원목), Ergonomic Curved Backrest",
+      "dimensions": "13(암리스): 480 × 520 × 780 (SH 440) mm / 14(암체어): 550 × 530 × 780 (SH 440) mm",
       "order": 7,
-      "content": "프로젝트 상세 내용입니다."
+      "content": "### 프로젝트 개요\n**Category** : Dining & Workspace Chair (Armless #13 & Armrest #14)\n**Role** : 의자 3D 곡면 밴딩 등받이 설계, 목공 조인트 결구 디테일 개발, 착석감 튜닝\n**Scope** :\n- 13번 암리스(Armless)와 14번 암체어(Armrest) 패밀리 라인업 동시 기획\n- 허리를 안정감 있게 감싸는 3D 성형 곡면 원목 등받이 곡률 설계\n- 장시간 식사 및 업무 착석 시 체압을 고르게 분산하는 좌판 인체공학 설계\n- 테이블 하부로 쏙 들어가는 콤팩트한 체어 스케일 조율\n\n### 기획 배경 및 콘셉트\n\"HANASI 13 & 14 — 가볍고 단정한 선 속에 담긴 안락한 착석감\"\n\n하나시 테이블 시리즈와 완벽한 조화를 이루는 원목 의자 라인업입니다. 팔걸이가 없어 공간 활용도가 높고 출입이 자유로운 13번 의자와, 팔을 편안하게 얹을 수 있는 14번 암체어를 함께 구성하여 다이닝 공간에 리듬감 있는 배치를 유도했습니다.\n\n### 디자인 방향성\n- **3D 성형 등받이 곡면**: 사람의 등뼈와 날개뼈 라인에 맞춰 완만하게 굽어지는 원목 벤딩 기법을 적용해 원목 의자 특유의 단단함을 잊게 하는 편안함 선사\n- **자연스러운 팔걸이 연장선 (14번 암체어)**: 등받이에서 팔걸이로 끊김 없이 매끄럽게 이어지는 곡면 라인으로 조형미와 안락함 극대화\n- **정밀 장부 맞춤 결구**: 나사 노출을 최소화하고 원목과 원목이 단단히 맞물리는 전통 결구 방식을 현대적으로 재해석하여 오랜 내구성 보증"
     },
     {
-      "title": "eter",
+      "title": "HANASI TABLE 11",
       "slug": "eter",
       "date": "2026",
       "thumbnail": "/images/work/eter-thumb.jpg",
@@ -301,13 +294,13 @@
         "/images/work/eter-19.jpg",
         "/images/work/eter-20.jpg"
       ],
-      "materials": "Aluminum Extrusions, Hardware",
-      "dimensions": "Various Dimensions",
+      "materials": "White Oak (화이트오크 원목 상판 / 이태리 세라믹 상판), Solid Oak Legs",
+      "dimensions": "1400 / 1600 / 1800 / 2000(W) × 800(D) × 740(H) mm",
       "order": 8,
-      "content": "프로젝트 상세 내용입니다."
+      "content": "### 프로젝트 개요\n**Category** : Dining & Multi-Table (Solid Wood & Ceramic Dual Top Option)\n**Role** : 테이블 에이프런 구조 설계, 상판 탈부착 및 호환 구조 기획, 양산 생산 감리\n**Scope** :\n- 원목 상판 및 세라믹 상판 2종 공용 프레임 구조 개발\n- 상판 두께와 비례를 맞춘 슬림 테이퍼드 원목 다리 조형 설계\n- 다이닝, 홈오피스, 서재 등 다양한 주거 공간에 어울리는 사이즈 스펙트럼(1400~2000)\n- 집성목의 정교한 결 맞춤 및 친환경 오일 마감 공정 표준화\n\n### 기획 배경 및 콘셉트\n\"HANASI 11 — 다이닝 공간의 중심을 잡는 정갈한 기본기\"\n\n가장 순수하고 정직한 테이블의 본질에 집중한 하나시 컬렉션의 스테디셀러 테이블입니다. 따뜻하고 자연스러운 원목 본연의 질감을 선호하는 사용자를 위한 원목 상판과, 관리가 편하고 견고한 세라믹 상판 중 사용자의 라이프스타일에 맞추어 선택할 수 있도록 설계했습니다.\n\n### 디자인 방향성\n- **듀얼 상판 옵션**: 은은한 나뭇결의 깊이를 담은 통원목 집성 상판과, 내열·내오염성이 뛰어난 프리미엄 세라믹 상판 중 선택 가능\n- **슬림 & 와이드 프레임워크**: 시각적으로 가볍고 단정하면서도 4인이상 다인 식사 및 데스크 작업 시 넉넉한 공간감 제공\n- **라운드 테이퍼드 레그**: 하부로 갈수록 슬림해지는 다리 디자인을 통해 바닥 공간을 시각적으로 넓어 보이게 하는 개방감 선사"
     },
     {
-      "title": "fgh",
+      "title": "MILEDY BOOKCASE 02 MODULE",
       "slug": "fgh",
       "date": "2026",
       "thumbnail": "/images/work/fgh-thumb.jpg",
@@ -327,13 +320,13 @@
         "/images/work/fgh-13.jpg",
         "/images/work/fgh-14.jpg"
       ],
-      "materials": "Aluminum Extrusions, Hardware",
-      "dimensions": "Various Dimensions",
+      "materials": "Solid White Oak / North American Walnut, Steel Hardware",
+      "dimensions": "Modular System (W 800/1600/2400 × D 350 × H 1950 mm)",
       "order": 9,
-      "content": "프로젝트 상세 내용입니다."
+      "content": "### 프로젝트 개요\n**Category** : Living & Study Furniture (Modular Bookcase & Storage System)\n**Role** : 모듈러 책장 및 수납 시스템 기획, 하중 분산 선반 구조 설계, 1:1 결구 감리\n**Scope** :\n- 공간 규모와 벽면 길이에 맞춰 자유롭게 확장 가능한 그리드 모듈 시스템 기획\n- 무거운 서적 하중을 견고하게 지지하는 원목 선반 및 수직 프레임 결구 설계\n- 오픈형 선반과 도어형 하부 수납 유닛의 유기적인 조합 구성\n- 서재, 거실, 오피스 등 다양한 공간에 어울리는 고급 원목 피니시 적용\n\n### 기획 배경 및 콘셉트\n\"MILEDY 02 — 책과 오브제가 공간의 조형이 되는 모듈러 서가\"\n\n공간의 크기와 사용자의 수납 라이프스타일에 맞추어 단독 또는 무한 확장이 가능한 모듈형 책장 시스템입니다. 하나시 및 벨리나 라인업과 어우러지는 단정한 원목 비례감 속에 다양한 크기의 책과 감각적인 오브제를 리듬감 있게 진열할 수 있도록 설계했습니다.\n\n### 디자인 방향성\n- **유연한 그리드 모듈러 확장성**: 단독 1열 유닛부터 거실 및 서재 벽면 전체를 채우는 와이드 구성까지 유연하게 확장 가능한 그리드 구조\n- **고하중 분산 원목 결구**: 장시간 무거운 양장본과 도자 오브제를 올려두어도 선반 처짐 현상이 발생하지 않도록 견고하게 하중을 분산하는 인터로킹 조인트\n- **미니멀 파사드 & 히든 조인트**: 나사 노출을 최소화하고 정갈한 원목 라인을 살려 오브제와 책 본연의 조형미가 돋보이도록 마감"
     }
   ],
-  "exportedAt": "2026-10-05T23:17:50.834Z",
+  "exportedAt": "2026-10-06T02:01:36.607Z",
   "experiences": [
     {
       "title": "Poing — ASIA DESIGN PRIZE 2021 'GOLD WINNER'",
@@ -398,5 +391,5 @@
       "content": "## CONVENSET — 건조대 & 수납장 일체형 가구\n\n**Category**: Furniture Design (1-Person Household Living System)  \n**Concept**: Drying Rack + Storage Cabinet (건조대 + 수납장 일체형)  \n**Designer**: Lee Hye Jun  \n**Target**: 바쁜 일상을 살아가는 1인 가구\n\n[PHOTOS]\n\n### 디자인 개요\n\n빨랫감을 쉽고 빠르게 보관하고 정리할 수 있는 신개념 **건조대 + 수납장 일체형 리빙 가구 'Convenset(컨벤셋)'**입니다.\n\n원룸이나 소형 주거 공간에서 바쁜 삶을 살아가는 1인 가구를 위해 기획된 가구로, 세탁 후 건조와 수납 과정에서 발생하는 **사용자의 동선과 이동을 최소화**하고 편리함을 극대화하여 가장 간편하고 정돈된 의류 관리 경험을 선사합니다.\n\n---\n\n### 핵심 디자인 특징\n\n1. **건조대와 수납장의 유기적 통합 (Drying Rack + Cabinet)**\n   세탁물을 널어 말리는 건조대 기능과 건조된 옷을 즉시 개어 넣을 수 있는 수납장을 하나의 가구로 결합하여 불필요한 가구 배치를 줄이고 소형 공간의 공간 활용도를 극대화했습니다.\n2. **동선 최소화 원스톱 의류 케어 시스템**\n   빨래를 널고, 말리고, 수납하는 모든 단계가 한자리에서 이루어지도록 설계하여 바쁜 일상 속 가사 노동 시간을 획기적으로 단축해 줍니다.\n3. **간결한 와이어 프레임과 단정한 목재 바디의 조화**\n   통기성이 중요한 건조 영역은 슬림한 스틸 와이어 구조로 가볍고 실용적으로 설계하고, 수납 영역은 따뜻하고 안정감 있는 목재로 마감하여 실내 인테리어와 단정하게 어우러집니다.\n\n---\n\n### English Description\n\n**Convenset** is an innovative multi-functional storage cabinet integrating a built-in drying rack designed specifically for busy single-person households.\n\nIn compact living spaces, laundry handling often creates spatial clutter and repetitive movement. Convenset eliminates unnecessary mobility by consolidating drying and storage into a single streamlined station. Users can dry freshly washed clothes and immediately fold and store them right where they are. Combining airy wireframe ventilation with tidy wooden cabinetry, Convenset delivers maximum everyday convenience while maintaining a clean, cohesive interior aesthetic."
     }
   ],
-  "updatedAt": "2026-10-05T23:35:06.506Z"
+  "updatedAt": "2026-10-06T02:01:36.607Z"
 }

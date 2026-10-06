@@ -153,7 +153,7 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
                   {project.date && (
                     <div className="text-black font-normal not-italic">{project.date}</div>
                   )}
-                  {project.externalUrl && (
+                  {isExperience && project.externalUrl && (
                     <div className="pt-1.5">
                       <a
                         href={project.externalUrl}
