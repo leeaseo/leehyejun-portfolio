@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { WorkProject, ProjectContribution, MoreProcessBlock } from '../lib/types';
+import { WorkProject, ProjectContribution, MoreProcessBlock, ProjectSpecItem } from '../lib/types';
 import { VisualFrame } from './VisualFrame';
 import { MdxContent } from './MdxContent';
 
@@ -8,6 +8,43 @@ interface MoreColumnProps {
   onClearActiveProject: () => void;
   onEditProject?: (project: WorkProject) => void;
   onProjectUpdated?: (updatedProject: WorkProject) => void;
+}
+
+export function getDefaultProjectSpecs(project: WorkProject): ProjectSpecItem[] {
+  if (Array.isArray(project.customSpecs)) {
+    return project.customSpecs;
+  }
+
+  const isExperience =
+    (project.order && project.order >= 100) ||
+    project.slug.includes('poing') ||
+    project.slug.includes('como') ||
+    project.slug.includes('librat') ||
+    project.slug.includes('convenset');
+
+  const brandVal =
+    project.brand !== undefined
+      ? project.brand
+      : isExperience
+      ? 'Exhibition / Independent Project'
+      : 'CHALS FURNITURE (찰스퍼니처)';
+
+  const materialsVal = project.materials !== undefined ? project.materials : '';
+  const dimensionsVal = project.dimensions !== undefined ? project.dimensions : '';
+
+  const processScopeVal =
+    project.processScope !== undefined
+      ? project.processScope
+      : isExperience
+      ? 'Concept Ideation · 3D CAD Modeling · Prototype Fabrication'
+      : 'Product Planning · 3D/CAD Drawing · 1:1 Prototyping · Mass-Production QC';
+
+  return [
+    { label: 'Brand', value: brandVal },
+    { label: 'Materials', value: materialsVal },
+    { label: 'Dimensions', value: dimensionsVal },
+    { label: 'Process Scope', value: processScopeVal },
+  ];
 }
 
 export function getDefaultContribution(project: WorkProject): Required<ProjectContribution> {
@@ -247,6 +284,7 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
   const formattedOrder =
     !isExperience && project.order ? String(project.order).padStart(2, '0') : null;
 
+  const specItems = getDefaultProjectSpecs(project);
   const contribution = getDefaultContribution(project);
 
   return (
@@ -278,48 +316,16 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
 
         {/* 2. SPECIFICATION & CONTRIBUTION TABLE */}
         <section className="divide-y divide-[rgba(0,0,0,0.1)] border-b border-[rgba(0,0,0,0.15)] text-[13px]">
-          {/* Brand (브랜드 기재란 — Materials 상단 배치) */}
-          <div className="py-3 grid grid-cols-12 gap-3 items-baseline">
-            <span className="col-span-4 sm:col-span-3 text-[11px] font-mono text-[rgba(0,0,0,0.45)] uppercase tracking-wider">
-              Brand
-            </span>
-            <span className="col-span-8 sm:col-span-9 text-[13px] text-black font-normal leading-relaxed">
-              {project.brand ||
-                (isExperience ? 'Exhibition / Independent Project' : 'CHALS FURNITURE (찰스퍼니처)')}
-            </span>
-          </div>
-
-          {/* Materials */}
-          <div className="py-3 grid grid-cols-12 gap-3 items-baseline">
-            <span className="col-span-4 sm:col-span-3 text-[11px] font-mono text-[rgba(0,0,0,0.45)] uppercase tracking-wider">
-              Materials
-            </span>
-            <span className="col-span-8 sm:col-span-9 text-[13px] text-black font-normal leading-relaxed">
-              {project.materials || 'Solid Wood, Engineered Hardware'}
-            </span>
-          </div>
-
-          {/* Dimensions */}
-          <div className="py-3 grid grid-cols-12 gap-3 items-baseline">
-            <span className="col-span-4 sm:col-span-3 text-[11px] font-mono text-[rgba(0,0,0,0.45)] uppercase tracking-wider">
-              Dimensions
-            </span>
-            <span className="col-span-8 sm:col-span-9 text-[13px] text-black font-normal leading-relaxed">
-              {project.dimensions || 'Standard Production Spec'}
-            </span>
-          </div>
-
-          {/* Process Scope */}
-          <div className="py-3 grid grid-cols-12 gap-3 items-baseline">
-            <span className="col-span-4 sm:col-span-3 text-[11px] font-mono text-[rgba(0,0,0,0.45)] uppercase tracking-wider">
-              Process Scope
-            </span>
-            <span className="col-span-8 sm:col-span-9 text-[13px] text-black font-normal leading-relaxed">
-              {isExperience
-                ? 'Concept Ideation · 3D CAD Modeling · Prototype Fabrication'
-                : 'Product Planning · 3D/CAD Drawing · 1:1 Prototyping · Mass-Production QC'}
-            </span>
-          </div>
+          {specItems.map((spec, idx) => (
+            <div key={idx} className="py-3 grid grid-cols-12 gap-3 items-baseline">
+              <span className="col-span-4 sm:col-span-3 text-[11px] font-mono text-[rgba(0,0,0,0.45)] uppercase tracking-wider">
+                {spec.label}
+              </span>
+              <span className="col-span-8 sm:col-span-9 text-[13px] text-black font-normal leading-relaxed min-h-[18px]">
+                {spec.value}
+              </span>
+            </div>
+          ))}
 
           {/* Contribution (기여도) */}
           {!isExperience && contribution.phases.length > 0 && (

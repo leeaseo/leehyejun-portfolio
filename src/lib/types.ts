@@ -69,11 +69,18 @@ export interface MoreProcessBlock {
   description: string;
 }
 
+export interface ProjectSpecItem {
+  label: string;
+  value: string;
+}
+
 export interface WorkProject {
   title: string;
   slug: string;
   date: string;
   brand?: string;
+  processScope?: string;
+  customSpecs?: ProjectSpecItem[];
   thumbnail: string;
   images: string[];
   processImages?: string[];

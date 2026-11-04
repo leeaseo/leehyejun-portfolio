@@ -7,10 +7,12 @@ import {
   ResumeHonor,
   ContributionPhase,
   MoreProcessBlock,
+  ProjectSpecItem,
 } from '../lib/types';
 import {
   ContributionLineGauge,
   getDefaultContribution,
+  getDefaultProjectSpecs,
   buildEditorialBlocks,
 } from './MoreColumn';
 import {
@@ -121,6 +123,16 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const [brand, setBrand] = useState('');
   const [materials, setMaterials] = useState('');
   const [dimensions, setDimensions] = useState('');
+  const [processScope, setProcessScope] = useState('');
+  const [customSpecs, setCustomSpecs] = useState<ProjectSpecItem[]>([
+    { label: 'Brand', value: 'CHALS FURNITURE' },
+    { label: 'Materials', value: '' },
+    { label: 'Dimensions', value: '' },
+    {
+      label: 'Process Scope',
+      value: 'Product Planning · 3D/CAD Drawing · 1:1 Prototyping · Mass-Production QC',
+    },
+  ]);
   const [order, setOrder] = useState<number>(1);
   const [externalUrl, setExternalUrl] = useState('');
   const [content, setContent] = useState('');
@@ -183,11 +195,30 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setDate(proj.date || '2026');
     const isExp =
       (typeof proj.order === 'number' && proj.order >= 100) || isExperienceSlug(proj.slug);
+    const initialSpecs = getDefaultProjectSpecs(proj);
+    setCustomSpecs(initialSpecs.map((s) => ({ label: s.label, value: s.value })));
+
+    const brandSpec = initialSpecs.find((s) => s.label.trim().toLowerCase() === 'brand');
+    const matSpec = initialSpecs.find((s) => s.label.trim().toLowerCase() === 'materials');
+    const dimSpec = initialSpecs.find((s) => s.label.trim().toLowerCase() === 'dimensions');
+    const scopeSpec = initialSpecs.find((s) => s.label.trim().toLowerCase() === 'process scope');
+
     setBrand(
-      proj.brand || (isExp ? 'Exhibition / Independent Project' : 'CHALS FURNITURE (찰스퍼니처)')
+      brandSpec !== undefined
+        ? brandSpec.value
+        : proj.brand ?? (isExp ? 'Exhibition / Independent Project' : 'CHALS FURNITURE')
     );
-    setMaterials(proj.materials || '');
-    setDimensions(proj.dimensions || '');
+    setMaterials(matSpec !== undefined ? matSpec.value : proj.materials ?? '');
+    setDimensions(dimSpec !== undefined ? dimSpec.value : proj.dimensions ?? '');
+    setProcessScope(
+      scopeSpec !== undefined
+        ? scopeSpec.value
+        : proj.processScope ??
+            (isExp
+              ? 'Concept Ideation · 3D CAD Modeling · Prototype Fabrication'
+              : 'Product Planning · 3D/CAD Drawing · 1:1 Prototyping · Mass-Production QC')
+    );
+
     setOrder(typeof proj.order === 'number' ? proj.order : 1);
     setExternalUrl(proj.externalUrl || '');
     setContent(proj.content || '');
@@ -264,11 +295,22 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
             .join('\n\n')
         : content;
 
+    const cleanedSpecs = customSpecs
+      .filter((s) => s.label.trim() !== '')
+      .map((s) => ({ label: s.label.trim(), value: s.value }));
+
+    const findSpecVal = (lbl: string, fallback: string) => {
+      const found = cleanedSpecs.find((s) => s.label.toLowerCase() === lbl.toLowerCase());
+      return found ? found.value : fallback;
+    };
+
     const currentData: WorkProject = {
       title: activeTitle || 'Untitled',
       slug: targetSlug,
       date: date || '2026',
-      brand: brand.trim() || 'CHALS FURNITURE (찰스퍼니처)',
+      brand: findSpecVal('brand', brand),
+      processScope: findSpecVal('process scope', processScope),
+      customSpecs: cleanedSpecs,
       thumbnail: thumbnail || '',
       images: detailImages,
       processImages: processImages,
@@ -276,8 +318,8 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         phases: contributionPhases.filter((ph) => ph.label.trim() !== ''),
       },
       moreBlocks: moreBlocks,
-      materials: materials || 'Aluminum Extrusions, Hardware',
-      dimensions: dimensions || 'Various Dimensions',
+      materials: findSpecVal('materials', materials),
+      dimensions: findSpecVal('dimensions', dimensions),
       externalUrl: externalUrl || undefined,
       order: Number(order) || (draftProjects.length + 1),
       content: syncedContent || content || '프로젝트 상세 내용입니다.',
@@ -945,9 +987,19 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setTitle('');
     setSlug('');
     setDate(new Date().getFullYear().toString());
-    setBrand('CHALS FURNITURE (찰스퍼니처)');
+    setBrand('CHALS FURNITURE');
     setMaterials('');
     setDimensions('');
+    setProcessScope('Product Planning · 3D/CAD Drawing · 1:1 Prototyping · Mass-Production QC');
+    setCustomSpecs([
+      { label: 'Brand', value: 'CHALS FURNITURE' },
+      { label: 'Materials', value: '' },
+      { label: 'Dimensions', value: '' },
+      {
+        label: 'Process Scope',
+        value: 'Product Planning · 3D/CAD Drawing · 1:1 Prototyping · Mass-Production QC',
+      },
+    ]);
     const maxOrder = draftProjects.reduce((max, p) => Math.max(max, Number(p.order) || 0), 0);
     setOrder(maxOrder + 1);
     setExternalUrl('');
@@ -1052,11 +1104,22 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               .join('\n\n')
           : content;
 
+      const cleanedSpecs = customSpecs
+        .filter((s) => s.label.trim() !== '')
+        .map((s) => ({ label: s.label.trim(), value: s.value }));
+
+      const findSpecVal = (lbl: string, fallback: string) => {
+        const found = cleanedSpecs.find((s) => s.label.toLowerCase() === lbl.toLowerCase());
+        return found ? found.value : fallback;
+      };
+
       const currentProjectData: WorkProject = {
         title: activeTitle || 'Untitled',
         slug: targetSlug,
         date: date || '2026',
-        brand: brand.trim() || 'CHALS FURNITURE (찰스퍼니처)',
+        brand: findSpecVal('brand', brand),
+        processScope: findSpecVal('process scope', processScope),
+        customSpecs: cleanedSpecs,
         thumbnail: thumbnail || '',
         images: detailImages,
         processImages: processImages,
@@ -1064,8 +1127,8 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
           phases: contributionPhases.filter((ph) => ph.label.trim() !== ''),
         },
         moreBlocks: moreBlocks,
-        materials: materials || 'Aluminum Extrusions, Hardware',
-        dimensions: dimensions || 'Various Dimensions',
+        materials: findSpecVal('materials', materials),
+        dimensions: findSpecVal('dimensions', dimensions),
         externalUrl: externalUrl || undefined,
         order: Number(order) || (finalProjects.length + 1),
         content: syncedContent || content || '프로젝트 상세 내용입니다.',
@@ -1851,9 +1914,9 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 </div>
               </div>
 
-              {/* Title & Order */}
+              {/* Title & Year & Order */}
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                <div className="sm:col-span-9">
+                <div className="sm:col-span-7">
                   <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
                     프로젝트명 (Title) *
                   </label>
@@ -1862,11 +1925,23 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     required
                     value={title}
                     onChange={(e) => handleTitleChange(e.target.value)}
-                    placeholder="예: Mobile Display System"
+                    placeholder="예: YEONHUI SHOWROOM - THE LAYER"
                     className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
                   />
                 </div>
                 <div className="sm:col-span-3">
+                  <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
+                    제작연도 (Year)
+                  </label>
+                  <input
+                    type="text"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    placeholder="2026"
+                    className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
+                  />
+                </div>
+                <div className="sm:col-span-2">
                   <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
                     순서 (Order)
                   </label>
@@ -1879,58 +1954,166 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 </div>
               </div>
 
-              {/* Brand & Materials & Dimensions & Year */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
-                    브랜드 (Brand — 어느 브랜드에서 진행한 작업인지 기재)
-                  </label>
-                  <input
-                    type="text"
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
-                    placeholder="예: CHALS FURNITURE (찰스퍼니처)"
-                    className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
-                  />
+              {/* ============================================================== */}
+              {/* 0. More 탭 상단 스펙 항목 관리 (Brand / Materials / Dimensions / Process Scope — 추가·삭제·빈칸 가능) */}
+              {/* ============================================================== */}
+              <div className="p-3.5 border border-[rgba(0,0,0,0.18)] bg-[#FAFAFA] space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-normal text-black text-[12.5px]">
+                      📋 <strong>More 탭 상단 스펙 항목 관리</strong> (Brand / Materials / Dimensions / Process Scope 등)
+                    </div>
+                    <div className="text-[11px] text-[rgba(0,0,0,0.5)] mt-0.5">
+                      내용을 비워두면 빈칸으로 유지되며, 우측 휴지통 버튼으로 필요 없는 항목 줄 자체를 삭제하거나 새 항목을 추가할 수 있습니다.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCustomSpecs((prev) => [...prev, { label: '새 항목', value: '' }])
+                    }
+                    className="text-[11px] border border-black bg-white px-2.5 py-1 hover:bg-neutral-100 cursor-pointer flex items-center gap-1 shrink-0"
+                  >
+                    <Plus size={11} />
+                    <span>+ 스펙 항목 추가</span>
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
-                    재료 (Materials)
-                  </label>
-                  <input
-                    type="text"
-                    value={materials}
-                    onChange={(e) => setMaterials(e.target.value)}
-                    placeholder="Solid Oak, Natural Linen..."
-                    className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
-                    규격 (Dimensions)
-                  </label>
-                  <input
-                    type="text"
-                    value={dimensions}
-                    onChange={(e) => setDimensions(e.target.value)}
-                    placeholder="W2100 x D950 x H780 mm"
-                    className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
-                  />
+                <div className="space-y-2 pt-1">
+                  {customSpecs.map((spec, sIdx) => (
+                    <div
+                      key={sIdx}
+                      className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-2 border border-[rgba(0,0,0,0.12)]"
+                    >
+                      {/* 좌측: 항목명 (Label) */}
+                      <div className="sm:col-span-3">
+                        <label className="block sm:hidden text-[10px] text-[rgba(0,0,0,0.45)] font-mono uppercase mb-0.5">
+                          항목명 (Label)
+                        </label>
+                        <input
+                          type="text"
+                          value={spec.label}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomSpecs((prev) => {
+                              const next = [...prev];
+                              next[sIdx] = { ...next[sIdx], label: val };
+                              return next;
+                            });
+                          }}
+                          placeholder="항목명 (예: Brand)"
+                          className="w-full border border-[rgba(0,0,0,0.2)] px-2.5 py-1 text-[12px] font-mono uppercase focus:outline-none focus:border-black"
+                        />
+                      </div>
+
+                      {/* 가운데: 내용 (Value) */}
+                      <div className="sm:col-span-7">
+                        <label className="block sm:hidden text-[10px] text-[rgba(0,0,0,0.45)] font-mono uppercase mb-0.5">
+                          내용 (Value — 비워두면 빈칸으로 표시)
+                        </label>
+                        <input
+                          type="text"
+                          value={spec.value}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomSpecs((prev) => {
+                              const next = [...prev];
+                              next[sIdx] = { ...next[sIdx], value: val };
+                              return next;
+                            });
+                          }}
+                          placeholder={`${spec.label} 내용 입력 (비워두면 빈칸으로 표시됩니다)`}
+                          className="w-full border border-[rgba(0,0,0,0.2)] px-2.5 py-1 text-[12.5px] focus:outline-none focus:border-black"
+                        />
+                      </div>
+
+                      {/* 우측: 위/아래 이동 + 항목 삭제 */}
+                      <div className="sm:col-span-2 flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          disabled={sIdx === 0}
+                          onClick={() => {
+                            if (sIdx === 0) return;
+                            setCustomSpecs((prev) => {
+                              const next = [...prev];
+                              const [moved] = next.splice(sIdx, 1);
+                              next.splice(sIdx - 1, 0, moved);
+                              return next;
+                            });
+                          }}
+                          className="px-1.5 py-1 text-[11px] border border-[rgba(0,0,0,0.15)] hover:border-black disabled:opacity-30 cursor-pointer"
+                          title="위로 이동"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={sIdx === customSpecs.length - 1}
+                          onClick={() => {
+                            if (sIdx === customSpecs.length - 1) return;
+                            setCustomSpecs((prev) => {
+                              const next = [...prev];
+                              const [moved] = next.splice(sIdx, 1);
+                              next.splice(sIdx + 1, 0, moved);
+                              return next;
+                            });
+                          }}
+                          className="px-1.5 py-1 text-[11px] border border-[rgba(0,0,0,0.15)] hover:border-black disabled:opacity-30 cursor-pointer"
+                          title="아래로 이동"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCustomSpecs((prev) => prev.filter((_, idx) => idx !== sIdx))
+                          }
+                          className="p-1.5 text-neutral-400 hover:text-red-600 border border-transparent hover:border-red-200 cursor-pointer"
+                          title="이 스펙 항목 줄 삭제"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
-                    제작연도 (Year)
-                  </label>
-                  <input
-                    type="text"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    placeholder="2026"
-                    className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
-                  />
+
+                {/* 삭제된 기본 항목 빠른 복원 버튼 */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+                  <span className="text-[rgba(0,0,0,0.45)] mr-1">빠른 항목 추가:</span>
+                  {[
+                    { label: 'Brand', defaultVal: 'CHALS FURNITURE' },
+                    { label: 'Materials', defaultVal: '' },
+                    { label: 'Dimensions', defaultVal: '' },
+                    {
+                      label: 'Process Scope',
+                      defaultVal:
+                        'Product Planning · 3D/CAD Drawing · 1:1 Prototyping · Mass-Production QC',
+                    },
+                  ].map((preset) => {
+                    const exists = customSpecs.some(
+                      (s) => s.label.trim().toLowerCase() === preset.label.toLowerCase()
+                    );
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() =>
+                          setCustomSpecs((prev) => [
+                            ...prev,
+                            { label: preset.label, value: preset.defaultVal },
+                          ])
+                        }
+                        className={`px-2 py-0.5 border text-[11px] cursor-pointer transition-colors ${
+                          exists
+                            ? 'border-[rgba(0,0,0,0.15)] text-[rgba(0,0,0,0.45)] bg-white hover:border-black hover:text-black'
+                            : 'border-black text-black bg-white hover:bg-neutral-100 font-medium'
+                        }`}
+                      >
+                        + {preset.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
