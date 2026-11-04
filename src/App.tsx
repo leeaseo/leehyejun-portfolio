@@ -44,8 +44,8 @@ export default function App() {
     return all[0]?.slug || null;
   });
 
-  // Mobile tab state
-  const [mobileTab, setMobileTab] = useState<MobileTab>('work');
+  // Mobile tab state (default to 'about' so mobile users see Profile + Resume + Work list first)
+  const [mobileTab, setMobileTab] = useState<MobileTab>('about');
 
   // Column Scroll Container Refs
   const aboutSectionRef = useRef<HTMLElement>(null);
@@ -226,7 +226,7 @@ export default function App() {
         }
       } else if (hash === 'about' || hash === 'resume') {
         setMobileTab('about');
-      } else if (hash === 'work') {
+      } else if (hash === 'work' || hash === 'photo') {
         setMobileTab('work');
       } else if (hash === 'admin') {
         setIsAdminOpen(true);
@@ -240,10 +240,15 @@ export default function App() {
 
   const handleSelectProject = (slug: string) => {
     setActiveProjectSlug(slug);
-    setMobileTab('more');
-    window.location.hash = `#more/${slug}`;
+    const isExp = isExperienceSlug(slug);
+    // Resume experience items open 'more' directly; Work items open 'work' (Photo) on mobile
+    setMobileTab(isExp ? 'more' : 'work');
     if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${isExp ? `more/${slug}` : 'photo'}`);
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+    if (workSectionRef.current) {
+      workSectionRef.current.scrollTop = 0;
     }
     if (moreSectionRef.current) {
       moreSectionRef.current.scrollTop = 0;
@@ -351,32 +356,32 @@ export default function App() {
       <header className="lg:hidden h-11 px-4 border-b border-[rgba(0,0,0,0.15)] flex items-center justify-between bg-white sticky top-0 z-30 shrink-0">
         <button
           onClick={() => handleTabChange('about')}
-          className="text-[14px] font-medium text-black text-left cursor-pointer"
+          className="text-[14px] font-medium text-black text-left cursor-pointer whitespace-nowrap shrink-0"
         >
           Lee Hye Jun
         </button>
         <nav className="flex items-center gap-1.5 text-[13px]">
           <button
             onClick={() => handleTabChange('about')}
-            className={`px-2 py-1 cursor-pointer font-normal transition-colors ${
+            className={`px-2 py-1 cursor-pointer font-normal transition-colors whitespace-nowrap shrink-0 ${
               mobileTab === 'about' ? 'text-black font-medium underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)] hover:text-black'
             }`}
           >
-            About
+            About · Work
           </button>
           <span className="text-[rgba(0,0,0,0.2)]">/</span>
           <button
             onClick={() => handleTabChange('work')}
-            className={`px-2 py-1 cursor-pointer font-normal transition-colors ${
+            className={`px-2 py-1 cursor-pointer font-normal transition-colors whitespace-nowrap shrink-0 ${
               mobileTab === 'work' ? 'text-black font-medium underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)] hover:text-black'
             }`}
           >
-            Work
+            Photo
           </button>
           <span className="text-[rgba(0,0,0,0.2)]">/</span>
           <button
             onClick={() => handleTabChange('more')}
-            className={`px-2 py-1 cursor-pointer font-normal transition-colors ${
+            className={`px-2 py-1 cursor-pointer font-normal transition-colors whitespace-nowrap shrink-0 ${
               mobileTab === 'more' ? 'text-black font-medium underline underline-offset-4' : 'text-[rgba(0,0,0,0.4)] hover:text-black'
             }`}
           >
@@ -387,7 +392,7 @@ export default function App() {
 
       {/* Main 3-Column Grid Container (1:1:1 exact ratio on desktop) */}
       <div className="flex-1 flex flex-col lg:grid lg:grid-cols-3 min-h-0 lg:overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[rgba(0,0,0,0.15)]">
-        {/* Column 1: About & Resume (Left - 1/3) */}
+        {/* Column 1: About & Resume & Work (Left - 1/3) */}
         <section
           ref={aboutSectionRef}
           className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
@@ -397,12 +402,13 @@ export default function App() {
           <AboutResumeColumn
             aboutData={aboutData}
             resumeData={resumeData}
+            projects={projectsList}
             activeProjectSlug={activeProjectSlug}
             onSelectProject={handleSelectProject}
           />
         </section>
 
-        {/* Column 2: Work (Middle - 1/3) */}
+        {/* Column 2: Photo - Final Product Shoot Gallery (Middle - 1/3) */}
         <section
           ref={workSectionRef}
           className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
@@ -411,12 +417,14 @@ export default function App() {
         >
           <WorkColumn
             projects={projectsList}
+            activeProject={activeProject}
             activeSlug={activeProjectSlug}
             onSelectProject={handleSelectProject}
+            onOpenMoreTab={() => handleTabChange('more')}
           />
         </section>
 
-        {/* Column 3: More (Right - 1/3) */}
+        {/* Column 3: More - Product Development Process & Specs (Right - 1/3) */}
         <section
           ref={moreSectionRef}
           className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${

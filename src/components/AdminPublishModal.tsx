@@ -1,5 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { WorkProject, AboutData, ResumeData, ResumeExperience, ResumeHonor } from '../lib/types';
+import {
+  WorkProject,
+  AboutData,
+  ResumeData,
+  ResumeExperience,
+  ResumeHonor,
+  ContributionPhase,
+  MoreProcessBlock,
+} from '../lib/types';
+import {
+  ContributionLineGauge,
+  getDefaultContribution,
+  buildEditorialBlocks,
+} from './MoreColumn';
 import {
   saveCustomProject,
   getAllProjects,
@@ -105,28 +118,49 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [date, setDate] = useState('2026');
+  const [brand, setBrand] = useState('');
   const [materials, setMaterials] = useState('');
   const [dimensions, setDimensions] = useState('');
   const [order, setOrder] = useState<number>(1);
   const [externalUrl, setExternalUrl] = useState('');
   const [content, setContent] = useState('');
 
-  // Work 대표사진 & More 세부사진
+  // Photo 탭 대표사진 & 최종 촬영 이미지 + More 탭 디벨롭/양산화 과정 이미지
   const [thumbnail, setThumbnail] = useState<string>('');
   const [detailImages, setDetailImages] = useState<string[]>([]);
   const [newDetailUrl, setNewDetailUrl] = useState('');
+  const [processImages, setProcessImages] = useState<string[]>([]);
+  const [newProcessUrl, setNewProcessUrl] = useState('');
   const [isCompressing, setIsCompressing] = useState(false);
+
+  // More 탭 기여도(CONTRIBUTION) 퍼센트 조절 및 디벨롭 블록(대표/서브 이미지 + 우측 설명) 상태
+  const [contributionPhases, setContributionPhases] = useState<ContributionPhase[]>([
+    { label: '기획 / 조형 디자인', percent: 100 },
+    { label: '2D CAD / 3D 설계', percent: 100 },
+    { label: '샘플 / 양산 감리', percent: 80 },
+  ]);
+  const [moreBlocks, setMoreBlocks] = useState<MoreProcessBlock[]>([]);
+  const [activeBlockUploadIdx, setActiveBlockUploadIdx] = useState<number>(0);
+  const [newBlockImageUrls, setNewBlockImageUrls] = useState<Record<number, string>>({});
 
   // Image Cropper State
   const [cropperState, setCropperState] = useState<{
     isOpen: boolean;
-    type: 'thumbnail' | 'detail-new' | 'detail-edit';
+    type:
+      | 'thumbnail'
+      | 'detail-new'
+      | 'detail-edit'
+      | 'process-new'
+      | 'process-edit'
+      | 'block-new'
+      | 'block-edit';
     imageSrc: string;
     title: string;
     subtitle?: string;
     queue?: { rawSrc: string; file?: File }[];
     queueIndex?: number;
     detailEditIndex?: number;
+    blockIndex?: number;
   }>({
     isOpen: false,
     type: 'thumbnail',
@@ -147,6 +181,11 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setTitle(proj.title || '');
     setSlug(proj.slug);
     setDate(proj.date || '2026');
+    const isExp =
+      (typeof proj.order === 'number' && proj.order >= 100) || isExperienceSlug(proj.slug);
+    setBrand(
+      proj.brand || (isExp ? 'Exhibition / Independent Project' : 'CHALS FURNITURE (찰스퍼니처)')
+    );
     setMaterials(proj.materials || '');
     setDimensions(proj.dimensions || '');
     setOrder(typeof proj.order === 'number' ? proj.order : 1);
@@ -157,6 +196,28 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       (img) => img && !img.includes('display-system-1.jpg') && !img.includes('display-system-2.jpg')
     );
     setDetailImages(cleanImages);
+    setProcessImages(Array.isArray(proj.processImages) ? proj.processImages.filter(Boolean) : []);
+
+    // Load Contribution phases
+    const defaultContrib = getDefaultContribution(proj);
+    setContributionPhases(
+      defaultContrib.phases.map((ph) => ({
+        label: ph.label,
+        percent: typeof ph.percent === 'number' ? ph.percent : 100,
+      }))
+    );
+
+    // Load More Editorial Blocks (대표/서브 이미지 + 우측 설명)
+    const builtBlocks = buildEditorialBlocks(proj);
+    setMoreBlocks(
+      builtBlocks.map((b, idx) => ({
+        id: b.id || `block-${idx + 1}`,
+        title: b.title || '',
+        images: Array.isArray(b.images) ? [...b.images] : [],
+        description: b.description || '',
+      }))
+    );
+
     setWorkTab('editor');
   };
 
@@ -187,7 +248,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
 
   const commitCurrentProjectToDraft = (currentSlug: string | null) => {
     const activeTitle = title.trim();
-    if (!currentSlug && !activeTitle && !thumbnail && detailImages.length === 0) return;
+    if (!currentSlug && !activeTitle && !thumbnail && detailImages.length === 0 && processImages.length === 0) return;
 
     const targetSlug =
       currentSlug ||
@@ -195,17 +256,31 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       activeTitle.toLowerCase().replace(/[^a-z0-9가-힣\s-]/g, '').trim().replace(/\s+/g, '-') ||
       `project-${Date.now()}`;
 
+    const syncedContent =
+      moreBlocks.length > 0
+        ? moreBlocks
+            .map((b) => `${b.title ? `### ${b.title}\n` : ''}${b.description || ''}`.trim())
+            .filter(Boolean)
+            .join('\n\n')
+        : content;
+
     const currentData: WorkProject = {
       title: activeTitle || 'Untitled',
       slug: targetSlug,
       date: date || '2026',
+      brand: brand.trim() || 'CHALS FURNITURE (찰스퍼니처)',
       thumbnail: thumbnail || '',
       images: detailImages,
+      processImages: processImages,
+      contribution: {
+        phases: contributionPhases.filter((ph) => ph.label.trim() !== ''),
+      },
+      moreBlocks: moreBlocks,
       materials: materials || 'Aluminum Extrusions, Hardware',
       dimensions: dimensions || 'Various Dimensions',
       externalUrl: externalUrl || undefined,
       order: Number(order) || (draftProjects.length + 1),
-      content: content || '프로젝트 상세 내용입니다.',
+      content: syncedContent || content || '프로젝트 상세 내용입니다.',
     };
 
     const isExp =
@@ -245,10 +320,13 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
 
   const thumbnailFileInputRef = useRef<HTMLInputElement>(null);
   const detailFileInputRef = useRef<HTMLInputElement>(null);
+  const processFileInputRef = useRef<HTMLInputElement>(null);
+  const blockFileInputRef = useRef<HTMLInputElement>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExportData = async () => {
     try {
+      showToast('📦 사진과 데이터를 포함한 올인원 백업 파일을 생성 중입니다...');
       const res = await fetch('/api/backup-full');
       if (res.ok) {
         const blob = await res.blob();
@@ -258,15 +336,41 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         link.download = `custom-data.json`;
         link.click();
         URL.revokeObjectURL(url);
-        showToast('✅ custom-data.json이 다운로드되었습니다. 깃허브 저장소(GitHub)에 업로드하시면 사이트에 자동 연동됩니다.');
+        showToast('✅ 사진 135장이 모두 포함된 custom-data.json이 다운로드되었습니다! 깃허브에 업로드하시면 사진이 즉시 정상 출력됩니다.');
         return;
       }
     } catch {}
 
+    // Fallback: Convert client images to base64
+    const urlToBase64 = async (imgUrl: string): Promise<string> => {
+      if (!imgUrl || imgUrl.startsWith('data:') || imgUrl.startsWith('http')) return imgUrl;
+      try {
+        const response = await fetch(imgUrl);
+        const blob = await response.blob();
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => resolve(imgUrl);
+          reader.readAsDataURL(blob);
+        });
+      } catch {
+        return imgUrl;
+      }
+    };
+
+    const rawProjs = getAllProjects();
+    const projsWithImages = await Promise.all(
+      rawProjs.map(async (p) => ({
+        ...p,
+        thumbnail: await urlToBase64(p.thumbnail),
+        images: await Promise.all((p.images || []).map(urlToBase64)),
+      }))
+    );
+
     const data = {
       about: getAboutData(),
       resume: getResumeData(),
-      projects: getAllProjects(),
+      projects: projsWithImages,
       experiences: getExperienceProjects(),
       exportedAt: new Date().toISOString(),
     };
@@ -277,7 +381,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     link.download = `custom-data.json`;
     link.click();
     URL.revokeObjectURL(url);
-    showToast('✅ custom-data.json이 다운로드되었습니다. 깃허브 저장소(GitHub)에 업로드하시면 사이트에 자동 연동됩니다.');
+    showToast('✅ 사진 135장이 모두 포함된 custom-data.json이 다운로드되었습니다! 깃허브에 업로드하시면 사진이 즉시 정상 출력됩니다.');
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -401,7 +505,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     }
   };
 
-  // More 세부사진 파일 업로드 (여러 장 선택 지원) -> 크롭 큐 순차 처리
+  // Photo 탭 추가 촬영컷 파일 업로드 (여러 장 선택 지원) -> 크롭 큐 순차 처리
   const handleDetailImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
@@ -420,8 +524,71 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
           isOpen: true,
           type: 'detail-new',
           imageSrc: queue[0].rawSrc,
-          title: queue.length > 1 ? `세부사진 자르기 (1 / ${queue.length})` : '세부사진 자르기 & 비율 조절',
-          subtitle: '우측 Photos 세부 섹션에 노출될 사진',
+          title: queue.length > 1 ? `Photo 촬영컷 자르기 (1 / ${queue.length})` : 'Photo 촬영컷 자르기 & 비율 조절',
+          subtitle: '가운데 Photo 탭에 노출될 제품 최종 촬영 이미지',
+          queue,
+          queueIndex: 0,
+        });
+      }
+      e.target.value = '';
+    }
+  };
+
+  // More 탭 디벨롭 & 양산화 과정 (비핸스 갤러리) 이미지 파일 업로드
+  const handleProcessImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const queue: { rawSrc: string; file?: File }[] = [];
+      for (const file of Array.from(files)) {
+        const rawSrc = await new Promise<string>((res) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result as string);
+          r.readAsDataURL(file);
+        });
+        queue.push({ rawSrc, file });
+      }
+
+      if (queue.length > 0) {
+        setCropperState({
+          isOpen: true,
+          type: 'process-new',
+          imageSrc: queue[0].rawSrc,
+          title: queue.length > 1 ? `More 양산화/디벨롭 보드 자르기 (1 / ${queue.length})` : 'More 양산화/디벨롭 보드 자르기 & 비율 조절',
+          subtitle: '맨 오른쪽 More 탭에 노출될 디벨롭·양산화 과정 이미지',
+          queue,
+          queueIndex: 0,
+        });
+      }
+      e.target.value = '';
+    }
+  };
+
+  // More 탭 특정 블록(1.1, 1.2, 1.3...)에 이미지 파일 업로드
+  const handleBlockImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    const targetBlockIdx = activeBlockUploadIdx;
+    if (files && files.length > 0) {
+      const queue: { rawSrc: string; file?: File }[] = [];
+      for (const file of Array.from(files)) {
+        const rawSrc = await new Promise<string>((res) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result as string);
+          r.readAsDataURL(file);
+        });
+        queue.push({ rawSrc, file });
+      }
+
+      if (queue.length > 0) {
+        setCropperState({
+          isOpen: true,
+          type: 'block-new',
+          blockIndex: targetBlockIdx,
+          imageSrc: queue[0].rawSrc,
+          title:
+            queue.length > 1
+              ? `More 블록 #${targetBlockIdx + 1} 이미지 자르기 (1 / ${queue.length})`
+              : `More 블록 #${targetBlockIdx + 1} 이미지 자르기 & 비율 조절`,
+          subtitle: `블록 #${targetBlockIdx + 1}의 대표(${targetBlockIdx + 1}.1) 및 서브 이미지`,
           queue,
           queueIndex: 0,
         });
@@ -447,7 +614,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
           ...prev,
           imageSrc: currentQueue[nextIdx].rawSrc,
           queueIndex: nextIdx,
-          title: `세부사진 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
+          title: `Photo 촬영컷 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
         }));
       } else {
         setCropperState((prev) => ({ ...prev, isOpen: false }));
@@ -458,6 +625,75 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         setDetailImages((prev) => {
           const next = [...prev];
           next[editIdx] = croppedDataUrl;
+          return next;
+        });
+      }
+      setCropperState((prev) => ({ ...prev, isOpen: false }));
+    } else if (cropperState.type === 'process-new') {
+      const currentQueue = cropperState.queue || [];
+      const currentIdx = cropperState.queueIndex || 0;
+      const nextIdx = currentIdx + 1;
+
+      setProcessImages((prev) => [...prev, croppedDataUrl]);
+
+      if (nextIdx < currentQueue.length) {
+        setCropperState((prev) => ({
+          ...prev,
+          imageSrc: currentQueue[nextIdx].rawSrc,
+          queueIndex: nextIdx,
+          title: `More 양산화/디벨롭 보드 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
+        }));
+      } else {
+        setCropperState((prev) => ({ ...prev, isOpen: false }));
+      }
+    } else if (cropperState.type === 'process-edit') {
+      if (cropperState.detailEditIndex !== undefined) {
+        const editIdx = cropperState.detailEditIndex;
+        setProcessImages((prev) => {
+          const next = [...prev];
+          next[editIdx] = croppedDataUrl;
+          return next;
+        });
+      }
+      setCropperState((prev) => ({ ...prev, isOpen: false }));
+    } else if (cropperState.type === 'block-new') {
+      const currentQueue = cropperState.queue || [];
+      const currentIdx = cropperState.queueIndex || 0;
+      const nextIdx = currentIdx + 1;
+      const bIdx = cropperState.blockIndex ?? 0;
+
+      setMoreBlocks((prev) => {
+        const next = [...prev];
+        if (next[bIdx]) {
+          next[bIdx] = {
+            ...next[bIdx],
+            images: [...(next[bIdx].images || []), croppedDataUrl],
+          };
+        }
+        return next;
+      });
+
+      if (nextIdx < currentQueue.length) {
+        setCropperState((prev) => ({
+          ...prev,
+          imageSrc: currentQueue[nextIdx].rawSrc,
+          queueIndex: nextIdx,
+          title: `More 블록 #${bIdx + 1} 이미지 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
+        }));
+      } else {
+        setCropperState((prev) => ({ ...prev, isOpen: false }));
+      }
+    } else if (cropperState.type === 'block-edit') {
+      const bIdx = cropperState.blockIndex ?? 0;
+      const editIdx = cropperState.detailEditIndex;
+      if (editIdx !== undefined) {
+        setMoreBlocks((prev) => {
+          const next = [...prev];
+          if (next[bIdx] && Array.isArray(next[bIdx].images)) {
+            const imgs = [...next[bIdx].images];
+            imgs[editIdx] = croppedDataUrl;
+            next[bIdx] = { ...next[bIdx], images: imgs };
+          }
           return next;
         });
       }
@@ -506,7 +742,84 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
           ...prev,
           imageSrc: currentQueue[nextIdx].rawSrc,
           queueIndex: nextIdx,
-          title: `세부사진 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
+          title: `Photo 촬영컷 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
+        }));
+      } else {
+        setCropperState((prev) => ({ ...prev, isOpen: false }));
+      }
+    } else if (cropperState.type === 'process-new') {
+      const currentQueue = cropperState.queue || [];
+      const currentIdx = cropperState.queueIndex || 0;
+      const item = currentQueue[currentIdx];
+      const nextIdx = currentIdx + 1;
+
+      try {
+        setIsCompressing(true);
+        const comp = item?.file
+          ? await compressImageFile(item.file, 2560, 0.92)
+          : item.rawSrc;
+        setProcessImages((prev) => [...prev, comp]);
+      } catch (err) {
+        console.error(err);
+        setProcessImages((prev) => [...prev, item.rawSrc]);
+      } finally {
+        setIsCompressing(false);
+      }
+
+      if (nextIdx < currentQueue.length) {
+        setCropperState((prev) => ({
+          ...prev,
+          imageSrc: currentQueue[nextIdx].rawSrc,
+          queueIndex: nextIdx,
+          title: `More 양산화/디벨롭 보드 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
+        }));
+      } else {
+        setCropperState((prev) => ({ ...prev, isOpen: false }));
+      }
+    } else if (cropperState.type === 'block-new') {
+      const currentQueue = cropperState.queue || [];
+      const currentIdx = cropperState.queueIndex || 0;
+      const item = currentQueue[currentIdx];
+      const nextIdx = currentIdx + 1;
+      const bIdx = cropperState.blockIndex ?? 0;
+
+      try {
+        setIsCompressing(true);
+        const comp = item?.file
+          ? await compressImageFile(item.file, 2560, 0.92)
+          : item.rawSrc;
+        setMoreBlocks((prev) => {
+          const next = [...prev];
+          if (next[bIdx]) {
+            next[bIdx] = {
+              ...next[bIdx],
+              images: [...(next[bIdx].images || []), comp],
+            };
+          }
+          return next;
+        });
+      } catch (err) {
+        console.error(err);
+        setMoreBlocks((prev) => {
+          const next = [...prev];
+          if (next[bIdx]) {
+            next[bIdx] = {
+              ...next[bIdx],
+              images: [...(next[bIdx].images || []), item.rawSrc],
+            };
+          }
+          return next;
+        });
+      } finally {
+        setIsCompressing(false);
+      }
+
+      if (nextIdx < currentQueue.length) {
+        setCropperState((prev) => ({
+          ...prev,
+          imageSrc: currentQueue[nextIdx].rawSrc,
+          queueIndex: nextIdx,
+          title: `More 블록 #${bIdx + 1} 이미지 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
         }));
       } else {
         setCropperState((prev) => ({ ...prev, isOpen: false }));
@@ -525,6 +838,28 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
 
   const handleRemoveDetailImage = (indexToRemove: number) => {
     setDetailImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  const handleAddProcessUrl = () => {
+    if (newProcessUrl.trim()) {
+      setProcessImages((prev) => [...prev, newProcessUrl.trim()]);
+      setNewProcessUrl('');
+    }
+  };
+
+  const handleRemoveProcessImage = (indexToRemove: number) => {
+    setProcessImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  const handleMoveProcessStep = (fromIndex: number, direction: 'left' | 'right') => {
+    const toIndex = direction === 'left' ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= processImages.length) return;
+    setProcessImages((prev) => {
+      const copy = [...prev];
+      const [movedItem] = copy.splice(fromIndex, 1);
+      copy.splice(toIndex, 0, movedItem);
+      return copy;
+    });
   };
 
   // Drag and drop states for detail images reordering
@@ -610,6 +945,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setTitle('');
     setSlug('');
     setDate(new Date().getFullYear().toString());
+    setBrand('CHALS FURNITURE (찰스퍼니처)');
     setMaterials('');
     setDimensions('');
     const maxOrder = draftProjects.reduce((max, p) => Math.max(max, Number(p.order) || 0), 0);
@@ -618,6 +954,20 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setContent('');
     setThumbnail('');
     setDetailImages([]);
+    setProcessImages([]);
+    setContributionPhases([
+      { label: '기획 / 조형 디자인', percent: 100 },
+      { label: '2D CAD / 3D 설계', percent: 100 },
+      { label: '샘플 / 양산 감리', percent: 80 },
+    ]);
+    setMoreBlocks([
+      {
+        id: 'block-1',
+        title: '기획 배경 및 조형 콘셉트',
+        images: [],
+        description: '',
+      },
+    ]);
     setWorkTab('editor');
   };
 
@@ -692,19 +1042,33 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
 
     let publishedProject: WorkProject | null = null;
 
-    if (activeSlug || activeTitle || thumbnail || detailImages.length > 0) {
+    if (activeSlug || activeTitle || thumbnail || detailImages.length > 0 || processImages.length > 0) {
       const targetSlug = activeSlug || `project-${Date.now()}`;
+      const syncedContent =
+        moreBlocks.length > 0
+          ? moreBlocks
+              .map((b) => `${b.title ? `### ${b.title}\n` : ''}${b.description || ''}`.trim())
+              .filter(Boolean)
+              .join('\n\n')
+          : content;
+
       const currentProjectData: WorkProject = {
         title: activeTitle || 'Untitled',
         slug: targetSlug,
         date: date || '2026',
+        brand: brand.trim() || 'CHALS FURNITURE (찰스퍼니처)',
         thumbnail: thumbnail || '',
         images: detailImages,
+        processImages: processImages,
+        contribution: {
+          phases: contributionPhases.filter((ph) => ph.label.trim() !== ''),
+        },
+        moreBlocks: moreBlocks,
         materials: materials || 'Aluminum Extrusions, Hardware',
         dimensions: dimensions || 'Various Dimensions',
         externalUrl: externalUrl || undefined,
         order: Number(order) || (finalProjects.length + 1),
-        content: content || '프로젝트 상세 내용입니다.',
+        content: syncedContent || content || '프로젝트 상세 내용입니다.',
       };
       publishedProject = currentProjectData;
 
@@ -1515,8 +1879,20 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 </div>
               </div>
 
-              {/* Materials & Dimensions & Year */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Brand & Materials & Dimensions & Year */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
+                    브랜드 (Brand — 어느 브랜드에서 진행한 작업인지 기재)
+                  </label>
+                  <input
+                    type="text"
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    placeholder="예: CHALS FURNITURE (찰스퍼니처)"
+                    className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
+                  />
+                </div>
                 <div>
                   <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
                     재료 (Materials)
@@ -1525,10 +1901,13 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     type="text"
                     value={materials}
                     onChange={(e) => setMaterials(e.target.value)}
-                    placeholder="Aluminum Extrusions..."
+                    placeholder="Solid Oak, Natural Linen..."
                     className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
                     규격 (Dimensions)
@@ -1537,7 +1916,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     type="text"
                     value={dimensions}
                     onChange={(e) => setDimensions(e.target.value)}
-                    placeholder="Various Dimensions"
+                    placeholder="W2100 x D950 x H780 mm"
                     className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
                   />
                 </div>
@@ -1549,19 +1928,19 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     type="text"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    placeholder="2025"
+                    placeholder="2026"
                     className="w-full border border-[rgba(0,0,0,0.25)] px-3 py-1.5 focus:outline-none focus:border-black text-[13px]"
                   />
                 </div>
               </div>
 
               {/* ============================================================== */}
-              {/* 1. Work 대표사진 (Work 메인 피드에 노출될 사진)              */}
+              {/* 1. Photo 탭 대표 촬영컷 (thumbnail)                            */}
               {/* ============================================================== */}
               <div className="p-3.5 border border-[rgba(0,0,0,0.15)] bg-[#FAFAFA] space-y-2.5">
                 <div className="flex justify-between items-center">
                   <span className="font-normal text-black text-[12.5px]">
-                    🖼️ <strong>Work 대표사진</strong> (메인 피드 카드에 크게 노출될 대표 사진)
+                    🖼️ <strong>Photo 대표 촬영컷</strong> (가운데 Photo 탭 최상단 및 목록 대표 사진)
                   </span>
                   {thumbnail && (
                     <div className="flex items-center gap-2">
@@ -1572,8 +1951,8 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                             isOpen: true,
                             type: 'thumbnail',
                             imageSrc: thumbnail,
-                            title: 'Work 대표사진 자르기 & 비율 조절',
-                            subtitle: '메인 피드 카드에 노출될 대표 이미지',
+                            title: 'Photo 대표 촬영컷 자르기 & 비율 조절',
+                            subtitle: '가운데 Photo 탭 최상단 대표 촬영 이미지',
                           });
                         }}
                         className="text-[11px] border border-[rgba(0,0,0,0.25)] bg-white px-2 py-0.5 hover:bg-neutral-100 flex items-center gap-1 cursor-pointer"
@@ -1604,8 +1983,8 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                             isOpen: true,
                             type: 'thumbnail',
                             imageSrc: thumbnail,
-                            title: 'Work 대표사진 자르기 & 비율 조절',
-                            subtitle: '메인 피드 카드에 노출될 대표 이미지',
+                            title: 'Photo 대표 촬영컷 자르기 & 비율 조절',
+                            subtitle: '가운데 Photo 탭 최상단 대표 촬영 이미지',
                           });
                         }}
                         className="absolute inset-0 bg-black/60 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10.5px]"
@@ -1655,12 +2034,12 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               </div>
 
               {/* ============================================================== */}
-              {/* 2. More 세부사진 목록 (우측 Photos 섹션에 노출)        */}
+              {/* 2. Photo 탭 최종 촬영 이미지 목록 (가운데 Photo 컬럼에 노출)    */}
               {/* ============================================================== */}
               <div className="p-3.5 border border-[rgba(0,0,0,0.15)] bg-[#FAFAFA] space-y-2.5">
                 <div className="flex justify-between items-center">
                   <span className="font-normal text-black text-[12.5px]">
-                    📸 <strong>More 세부사진 목록</strong> (우측 Photos 섹션에 나열될 상세 컷들)
+                    📸 <strong>Photo 탭 — 제품 최종 촬영 이미지 목록</strong> (가운데 Photo 탭에 나열될 스튜디오/공간 촬영컷)
                   </span>
                   <span className="text-[11px] text-[rgba(0,0,0,0.45)]">
                     총 {detailImages.length}장
@@ -1683,7 +2062,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     className="text-[12px] border border-black bg-white px-3 py-1.5 flex items-center gap-1.5 hover:bg-neutral-100 cursor-pointer disabled:opacity-50"
                   >
                     {isCompressing ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                    <span>세부사진 추가 (여러 장 선택 가능)</span>
+                    <span>최종 촬영 이미지 추가 (여러 장 선택 가능)</span>
                   </button>
 
                   <div className="flex items-center gap-1 flex-1 min-w-[200px]">
@@ -1710,7 +2089,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     <div className="flex items-center justify-between text-[11px] text-[rgba(0,0,0,0.55)] bg-white px-2 py-1.5 border border-[rgba(0,0,0,0.1)]">
                       <span className="flex items-center gap-1.5">
                         <GripVertical size={13} className="text-neutral-500" />
-                        <span><strong>드래그 & 드롭</strong>으로 사진 순서를 자유롭게 바꿀 수 있습니다. (마우스로 끌어서 이동 또는 ◀ ▶ 클릭)</span>
+                        <span><strong>드래그 & 드롭</strong>으로 촬영컷 순서를 바꿀 수 있습니다.</span>
                       </span>
                       <span className="font-mono text-[10.5px] text-[rgba(0,0,0,0.4)]">총 {detailImages.length}장</span>
                     </div>
@@ -1772,7 +2151,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                               <X size={11} />
                             </button>
 
-                            {/* Bottom Controls Bar on Hover: ◀ Left, Set as Thumbnail, Right ▶ */}
+                            {/* Bottom Controls Bar on Hover */}
                             <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/85 via-black/60 to-transparent p-1.5 pt-3.5 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-10">
                               <div className="flex items-center gap-1">
                                 <button
@@ -1810,8 +2189,8 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                                       isOpen: true,
                                       type: 'detail-edit',
                                       imageSrc: imgSrc,
-                                      title: `세부사진 #${idx + 1} 자르기 & 비율 조절`,
-                                      subtitle: '선택한 세부 사진의 구도 및 비율 재조정',
+                                      title: `촬영컷 #${idx + 1} 자르기 & 비율 조절`,
+                                      subtitle: '선택한 촬영 이미지의 구도 및 비율 재조정',
                                       detailEditIndex: idx,
                                     });
                                   }}
@@ -1827,7 +2206,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                                     setThumbnail(imgSrc);
                                   }}
                                   className="text-[9.5px] bg-white text-black px-1.5 py-0.5 font-normal hover:bg-neutral-200 cursor-pointer transition-colors shadow-xs"
-                                  title="이 사진을 Work 대표사진으로 설정"
+                                  title="이 사진을 대표 촬영컷으로 설정"
                                 >
                                   대표로 지정
                                 </button>
@@ -1840,23 +2219,418 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   </div>
                 ) : (
                   <div className="text-[11.5px] text-[rgba(0,0,0,0.4)] py-1">
-                    등록된 세부사진이 없습니다. (미등록 시 시스템 기본 도면 플레이트가 표시됩니다)
+                    등록된 최종 촬영 이미지가 없습니다.
                   </div>
                 )}
               </div>
 
-              {/* Markdown Content (More 상세 본문) */}
-              <div>
-                <label className="block text-[11px] text-[rgba(0,0,0,0.5)] uppercase mb-1 font-mono">
-                  More 본문 설명 (Markdown / Text)
-                </label>
-                <textarea
-                  rows={5}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="프로젝트 상세 설명 내용을 작성하세요..."
-                  className="w-full border border-[rgba(0,0,0,0.25)] p-3 text-[13px] leading-relaxed focus:outline-none focus:border-black font-sans"
+              {/* ============================================================== */}
+              {/* 3. More 탭 — CONTRIBUTION (기여도 % 조절 및 항목 설정)          */}
+              {/* ============================================================== */}
+              <div className="p-3.5 border border-[rgba(0,0,0,0.2)] bg-[#FAFAFA] space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[rgba(0,0,0,0.1)]">
+                  <div>
+                    <span className="font-medium text-black text-[13px]">
+                      📊 More 탭 — CONTRIBUTION (기여도 % 설정)
+                    </span>
+                    <div className="text-[11px] text-[rgba(0,0,0,0.5)] mt-0.5">
+                      우측 More 탭 스펙 하단에 표시되는 단계별 기여도 항목명과 퍼센트(0~100%)를 자유롭게 조절할 수 있습니다.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setContributionPhases((prev) => [
+                        ...prev,
+                        { label: '추가 단계 항목', percent: 100 },
+                      ])
+                    }
+                    className="text-[11.5px] bg-black text-white px-2.5 py-1 flex items-center gap-1 hover:bg-neutral-800 cursor-pointer shrink-0"
+                  >
+                    <Plus size={11} />
+                    <span>기여도 항목 추가</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {contributionPhases.map((phase, pIdx) => (
+                    <div
+                      key={pIdx}
+                      className="p-2.5 bg-white border border-[rgba(0,0,0,0.15)] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                    >
+                      {/* 항목명 입력 */}
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 shrink-0" />
+                        <input
+                          type="text"
+                          value={phase.label}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setContributionPhases((prev) => {
+                              const copy = [...prev];
+                              copy[pIdx] = { ...copy[pIdx], label: val };
+                              return copy;
+                            });
+                          }}
+                          placeholder="예: 기획 / 조형 디자인"
+                          className="w-full border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px] focus:outline-none focus:border-black"
+                        />
+                      </div>
+
+                      {/* 슬라이더 + 숫자 직접 입력 + 실시간 게이지 미리보기 */}
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={phase.percent}
+                          onChange={(e) => {
+                            const num = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                            setContributionPhases((prev) => {
+                              const copy = [...prev];
+                              copy[pIdx] = { ...copy[pIdx], percent: num };
+                              return copy;
+                            });
+                          }}
+                          className="w-24 sm:w-28 accent-black cursor-pointer"
+                          title="드래그하여 기여도 % 조절"
+                        />
+
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={phase.percent}
+                            onChange={(e) => {
+                              const num = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                              setContributionPhases((prev) => {
+                                const copy = [...prev];
+                                copy[pIdx] = { ...copy[pIdx], percent: num };
+                                return copy;
+                              });
+                            }}
+                            className="w-14 border border-[rgba(0,0,0,0.25)] px-1.5 py-1 text-[12.5px] font-mono text-right focus:outline-none focus:border-black"
+                          />
+                          <span className="text-[12px] font-mono text-black">%</span>
+                        </div>
+
+                        <div className="hidden md:block pl-1">
+                          <ContributionLineGauge percent={phase.percent} />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setContributionPhases((prev) => prev.filter((_, i) => i !== pIdx))
+                          }
+                          className="text-red-600 hover:bg-red-50 p-1 cursor-pointer transition-colors"
+                          title="이 기여도 항목 삭제"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {contributionPhases.length === 0 && (
+                    <div className="text-[11.5px] text-[rgba(0,0,0,0.45)] py-1">
+                      등록된 기여도 항목이 없습니다. 우측 상단 [기여도 항목 추가]를 눌러 추가하세요.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ============================================================== */}
+              {/* 4. More 탭 — 디벨롭 과정 블록 (대표/서브 이미지 + 우측 설명내용) */}
+              {/* ============================================================== */}
+              <div className="p-3.5 border border-black/30 bg-[#F7F7F5] space-y-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[rgba(0,0,0,0.12)]">
+                  <div>
+                    <span className="font-medium text-black text-[13px]">
+                      🛠️ More 탭 — 디벨롭 과정 블록 편집 (상단 대표/좌측 서브 이미지 + 우측 설명내용)
+                    </span>
+                    <div className="text-[11px] text-[rgba(0,0,0,0.55)] mt-0.5">
+                      각 블록의 1번 이미지(예: 1.1)가 상단 대표이미지로 먼저 보이며, 좌측 서브 썸네일(1.1, 1.2, 1.3...) 클릭 시 상단 이미지가 전환됩니다.
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMoreBlocks((prev) => [
+                        ...prev,
+                        {
+                          id: `block-${Date.now()}`,
+                          title: `디벨롭 프로세스 0${prev.length + 1}`,
+                          images: [],
+                          description: '',
+                        },
+                      ])
+                    }
+                    className="text-[11.5px] bg-black text-white px-2.5 py-1.5 flex items-center gap-1 hover:bg-neutral-800 cursor-pointer shrink-0"
+                  >
+                    <Plus size={12} />
+                    <span>+ 새 디벨롭 블록 추가</span>
+                  </button>
+                </div>
+
+                {/* Hidden file input shared for block image uploads */}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  ref={blockFileInputRef}
+                  onChange={handleBlockImageUpload}
+                  className="hidden"
                 />
+
+                <div className="space-y-4">
+                  {moreBlocks.map((block, bIdx) => {
+                    const blockNum = bIdx + 1;
+                    const blockImages = Array.isArray(block.images) ? block.images : [];
+                    const urlInputVal = newBlockImageUrls[bIdx] || '';
+
+                    return (
+                      <div
+                        key={block.id || bIdx}
+                        className="p-3.5 bg-white border border-[rgba(0,0,0,0.18)] space-y-3"
+                      >
+                        {/* Block Header */}
+                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-[rgba(0,0,0,0.08)]">
+                          <span className="text-[12.5px] font-bold text-black font-mono">
+                            BLOCK #{blockNum} ({blockNum}.1, {blockNum}.2, {blockNum}.3...)
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {moreBlocks.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setMoreBlocks((prev) => prev.filter((_, i) => i !== bIdx))
+                                }
+                                className="text-[11px] text-red-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <Trash2 size={11} />
+                                <span>블록 삭제</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 1. 블록 이미지 관리 (1.1 대표이미지, 1.2 서브이미지...) */}
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[11.5px] font-medium text-black">
+                              📷 블록 #{blockNum} 이미지 ({blockNum}.1 = 대표이미지, {blockNum}.2~ = 서브 썸네일)
+                            </span>
+                            <span className="text-[11px] font-mono text-[rgba(0,0,0,0.45)]">
+                              총 {blockImages.length}장
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveBlockUploadIdx(bIdx);
+                                setTimeout(() => blockFileInputRef.current?.click(), 0);
+                              }}
+                              disabled={isCompressing}
+                              className="text-[11.5px] border border-black bg-black text-white px-2.5 py-1 flex items-center gap-1.5 hover:bg-neutral-800 cursor-pointer disabled:opacity-50"
+                            >
+                              {isCompressing ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <Upload size={11} />
+                              )}
+                              <span>+ 사진 추가 (여러 장 가능)</span>
+                            </button>
+
+                            <div className="flex items-center gap-1 flex-1 min-w-[180px]">
+                              <input
+                                type="text"
+                                value={urlInputVal}
+                                onChange={(e) =>
+                                  setNewBlockImageUrls((prev) => ({
+                                    ...prev,
+                                    [bIdx]: e.target.value,
+                                  }))
+                                }
+                                placeholder="이미지 URL 직접 추가"
+                                className="flex-1 border border-[rgba(0,0,0,0.25)] px-2 py-1 text-[11.5px] bg-white focus:outline-none focus:border-black"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const trimmed = urlInputVal.trim();
+                                  if (!trimmed) return;
+                                  setMoreBlocks((prev) => {
+                                    const copy = [...prev];
+                                    copy[bIdx] = {
+                                      ...copy[bIdx],
+                                      images: [...(copy[bIdx].images || []), trimmed],
+                                    };
+                                    return copy;
+                                  });
+                                  setNewBlockImageUrls((prev) => ({ ...prev, [bIdx]: '' }));
+                                }}
+                                className="text-[11.5px] border border-[rgba(0,0,0,0.3)] bg-neutral-50 px-2 py-1 hover:bg-neutral-100 cursor-pointer"
+                              >
+                                추가
+                              </button>
+                            </div>
+                          </div>
+
+                          {blockImages.length > 0 ? (
+                            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 pt-1">
+                              {blockImages.map((imgSrc, imgIdx) => {
+                                const badgeLabel = `${blockNum}.${imgIdx + 1}`;
+                                return (
+                                  <div
+                                    key={imgIdx}
+                                    className="relative group bg-[#FAF9F6] border border-[rgba(0,0,0,0.2)] h-24 overflow-hidden"
+                                  >
+                                    <img
+                                      src={imgSrc}
+                                      alt={badgeLabel}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute top-1 left-1 bg-black/85 text-white text-[9.5px] px-1.5 py-0.5 font-mono">
+                                      {badgeLabel} {imgIdx === 0 ? '(대표)' : ''}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setMoreBlocks((prev) => {
+                                          const copy = [...prev];
+                                          copy[bIdx] = {
+                                            ...copy[bIdx],
+                                            images: copy[bIdx].images.filter((_, i) => i !== imgIdx),
+                                          };
+                                          return copy;
+                                        });
+                                      }}
+                                      className="absolute top-1 right-1 bg-black/80 text-white p-0.5 hover:bg-red-600 transition-colors cursor-pointer"
+                                      title="삭제"
+                                    >
+                                      <X size={10} />
+                                    </button>
+                                    <div className="absolute bottom-0 inset-x-0 bg-black/75 p-1 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <div className="flex items-center gap-0.5">
+                                        <button
+                                          type="button"
+                                          disabled={imgIdx === 0}
+                                          onClick={() => {
+                                            setMoreBlocks((prev) => {
+                                              const copy = [...prev];
+                                              const imgs = [...copy[bIdx].images];
+                                              const [moved] = imgs.splice(imgIdx, 1);
+                                              imgs.splice(imgIdx - 1, 0, moved);
+                                              copy[bIdx] = { ...copy[bIdx], images: imgs };
+                                              return copy;
+                                            });
+                                          }}
+                                          className="text-white p-0.5 disabled:opacity-30 cursor-pointer"
+                                          title="앞으로 이동"
+                                        >
+                                          <ChevronLeft size={11} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={imgIdx === blockImages.length - 1}
+                                          onClick={() => {
+                                            setMoreBlocks((prev) => {
+                                              const copy = [...prev];
+                                              const imgs = [...copy[bIdx].images];
+                                              const [moved] = imgs.splice(imgIdx, 1);
+                                              imgs.splice(imgIdx + 1, 0, moved);
+                                              copy[bIdx] = { ...copy[bIdx], images: imgs };
+                                              return copy;
+                                            });
+                                          }}
+                                          className="text-white p-0.5 disabled:opacity-30 cursor-pointer"
+                                          title="뒤로 이동"
+                                        >
+                                          <ChevronRight size={11} />
+                                        </button>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCropperState({
+                                            isOpen: true,
+                                            type: 'block-edit',
+                                            blockIndex: bIdx,
+                                            detailEditIndex: imgIdx,
+                                            imageSrc: imgSrc,
+                                            title: `${badgeLabel} 이미지 자르기`,
+                                            subtitle: `More 블록 #${blockNum} 이미지 구도 조정`,
+                                          });
+                                        }}
+                                        className="text-white p-0.5 cursor-pointer"
+                                        title="자르기"
+                                      >
+                                        <Crop size={10} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-[rgba(0,0,0,0.45)] py-1">
+                              이 블록에 등록된 이미지가 없습니다. [+ 사진 추가] 버튼으로 대표(1.1) 및 서브(1.2, 1.3) 이미지를 등록하세요.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 2. 블록 우측 소제목 및 설명내용 입력 */}
+                        <div className="grid grid-cols-1 gap-2 pt-1">
+                          <div>
+                            <label className="block text-[11px] text-[rgba(0,0,0,0.5)] mb-1">
+                              우측 설명 소제목 (선택사항)
+                            </label>
+                            <input
+                              type="text"
+                              value={block.title || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setMoreBlocks((prev) => {
+                                  const copy = [...prev];
+                                  copy[bIdx] = { ...copy[bIdx], title: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="예: 프로젝트 개요 / 구조 설계 및 디테일"
+                              className="w-full border border-[rgba(0,0,0,0.25)] px-2.5 py-1.5 text-[12.5px] focus:outline-none focus:border-black"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] text-[rgba(0,0,0,0.5)] mb-1">
+                              우측 상세 설명내용 (13px 본문으로 표시됨)
+                            </label>
+                            <textarea
+                              rows={4}
+                              value={block.description || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setMoreBlocks((prev) => {
+                                  const copy = [...prev];
+                                  copy[bIdx] = { ...copy[bIdx], description: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="우측에 표시될 디벨롭 과정 및 상세 설명을 입력하세요..."
+                              className="w-full border border-[rgba(0,0,0,0.25)] p-2.5 text-[12.5px] leading-relaxed focus:outline-none focus:border-black"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Action Buttons */}

@@ -68,6 +68,30 @@ async function startServer() {
             return img;
           });
         }
+        if (Array.isArray(p.processImages)) {
+          p.processImages = p.processImages.map((img: string, idx: number) => {
+            if (typeof img === 'string' && img.startsWith('data:image')) {
+              return saveBase64(img, `${safeSlug}-process-${String(idx + 1).padStart(2, '0')}`);
+            }
+            return img;
+          });
+        }
+        if (Array.isArray(p.moreBlocks)) {
+          p.moreBlocks = p.moreBlocks.map((block: any, bIdx: number) => ({
+            ...block,
+            images: Array.isArray(block.images)
+              ? block.images.map((img: string, iIdx: number) => {
+                  if (typeof img === 'string' && img.startsWith('data:image')) {
+                    return saveBase64(
+                      img,
+                      `${safeSlug}-block${bIdx + 1}-${String(iIdx + 1).padStart(2, '0')}`
+                    );
+                  }
+                  return img;
+                })
+              : [],
+          }));
+        }
         return p;
       });
     }
@@ -86,6 +110,30 @@ async function startServer() {
             }
             return img;
           });
+        }
+        if (Array.isArray(e.processImages)) {
+          e.processImages = e.processImages.map((img: string, idx: number) => {
+            if (typeof img === 'string' && img.startsWith('data:image')) {
+              return saveBase64(img, `${safeSlug}-process-${String(idx + 1).padStart(2, '0')}`);
+            }
+            return img;
+          });
+        }
+        if (Array.isArray(e.moreBlocks)) {
+          e.moreBlocks = e.moreBlocks.map((block: any, bIdx: number) => ({
+            ...block,
+            images: Array.isArray(block.images)
+              ? block.images.map((img: string, iIdx: number) => {
+                  if (typeof img === 'string' && img.startsWith('data:image')) {
+                    return saveBase64(
+                      img,
+                      `${safeSlug}-block${bIdx + 1}-${String(iIdx + 1).padStart(2, '0')}`
+                    );
+                  }
+                  return img;
+                })
+              : [],
+          }));
         }
         return e;
       });
@@ -154,6 +202,13 @@ async function startServer() {
         ...p,
         thumbnail: pathToBase64(p.thumbnail),
         images: Array.isArray(p.images) ? p.images.map(pathToBase64) : [],
+        processImages: Array.isArray(p.processImages) ? p.processImages.map(pathToBase64) : [],
+        moreBlocks: Array.isArray(p.moreBlocks)
+          ? p.moreBlocks.map((b: any) => ({
+              ...b,
+              images: Array.isArray(b.images) ? b.images.map(pathToBase64) : [],
+            }))
+          : undefined,
       }));
     }
     if (Array.isArray(result.experiences)) {
@@ -161,6 +216,13 @@ async function startServer() {
         ...e,
         thumbnail: pathToBase64(e.thumbnail),
         images: Array.isArray(e.images) ? e.images.map(pathToBase64) : [],
+        processImages: Array.isArray(e.processImages) ? e.processImages.map(pathToBase64) : [],
+        moreBlocks: Array.isArray(e.moreBlocks)
+          ? e.moreBlocks.map((b: any) => ({
+              ...b,
+              images: Array.isArray(b.images) ? b.images.map(pathToBase64) : [],
+            }))
+          : undefined,
       }));
     }
     if (result.about && result.about.profileImage) {

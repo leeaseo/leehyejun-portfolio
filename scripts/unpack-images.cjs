@@ -93,6 +93,40 @@ function syncAndUnpackAll() {
     return true;
   }
 
+  // Always unpack standalone base64 backup first so all /images/work/*.jpg files exist on disk
+  const standaloneBackupPath = path.resolve(rootDir, 'leehyejun-full-standalone-backup.json');
+  if (fs.existsSync(standaloneBackupPath)) {
+    try {
+      const standaloneData = JSON.parse(fs.readFileSync(standaloneBackupPath, 'utf8'));
+      const standaloneItems = [...(standaloneData.projects || []), ...(standaloneData.experiences || [])];
+      for (const item of standaloneItems) {
+        const slug = item.slug || 'project';
+        if (item.thumbnail && item.thumbnail.startsWith('data:image')) {
+          const fullPath = path.join(targetDir, `${slug}-thumb.jpg`);
+          if (!fs.existsSync(fullPath)) saveBase64ToFile(item.thumbnail, fullPath);
+        }
+        if (Array.isArray(item.images)) {
+          item.images.forEach((img, idx) => {
+            if (img && img.startsWith('data:image')) {
+              const fullPath = path.join(targetDir, `${slug}-${String(idx + 1).padStart(2, '0')}.jpg`);
+              if (!fs.existsSync(fullPath)) saveBase64ToFile(img, fullPath);
+            }
+          });
+        }
+        if (Array.isArray(item.processImages)) {
+          item.processImages.forEach((img, idx) => {
+            if (img && img.startsWith('data:image')) {
+              const fullPath = path.join(targetDir, `${slug}-process-${String(idx + 1).padStart(2, '0')}.jpg`);
+              if (!fs.existsSync(fullPath)) saveBase64ToFile(img, fullPath);
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[Sync-Build] Could not unpack standalone backup:', e);
+    }
+  }
+
   const allItems = [...(data.projects || []), ...(data.experiences || [])];
 
   for (const item of allItems) {
@@ -109,6 +143,19 @@ function syncAndUnpackAll() {
         if (img && img.startsWith('data:image')) {
           const slug = item.slug || `project-${Date.now()}`;
           const filename = `${slug}-${String(idx + 1).padStart(2, '0')}.jpg`;
+          const fullPath = path.join(targetDir, filename);
+          saveBase64ToFile(img, fullPath);
+          return `/images/work/${filename}`;
+        }
+        return img;
+      });
+    }
+
+    if (Array.isArray(item.processImages)) {
+      item.processImages = item.processImages.map((img, idx) => {
+        if (img && img.startsWith('data:image')) {
+          const slug = item.slug || `project-${Date.now()}`;
+          const filename = `${slug}-process-${String(idx + 1).padStart(2, '0')}.jpg`;
           const fullPath = path.join(targetDir, filename);
           saveBase64ToFile(img, fullPath);
           return `/images/work/${filename}`;

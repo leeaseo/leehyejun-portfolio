@@ -23,12 +23,12 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '',
     if (inList && listItems.length > 0) {
       if (isOrderedList) {
         elements.push(
-          <ol key={`ol-${keyPrefix}`} className="list-decimal pl-5 my-4 space-y-4 text-[13px] leading-relaxed text-black">
+          <ol key={`ol-${keyPrefix}`} className="list-decimal pl-5 my-3 space-y-2.5 text-[13px] leading-[1.7] text-black">
             {listItems.map((item, idx) => (
-              <li key={idx} className="leading-relaxed pl-1">
+              <li key={idx} className="leading-[1.7] pl-1">
                 <div className="font-semibold text-black">{parseInline(item.title)}</div>
                 {item.body.length > 0 && (
-                  <div className="text-[13px] text-black leading-relaxed mt-1">
+                  <div className="text-[13px] text-black leading-[1.7] mt-0.5">
                     {parseInline(item.body.join(' '))}
                   </div>
                 )}
@@ -38,12 +38,12 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '',
         );
       } else {
         elements.push(
-          <ul key={`ul-${keyPrefix}`} className="list-disc pl-5 my-3 space-y-1.5 text-[13px] leading-relaxed text-black">
+          <ul key={`ul-${keyPrefix}`} className="list-disc pl-5 my-2.5 space-y-2 text-[13px] leading-[1.7] text-black">
             {listItems.map((item, idx) => (
-              <li key={idx} className="leading-relaxed pl-1">
-                <div>{parseInline(item.title)}</div>
+              <li key={idx} className="leading-[1.7] pl-1">
+                <div>{parseListItemInline(item.title)}</div>
                 {item.body.length > 0 && (
-                  <div className="text-[13px] text-black leading-relaxed mt-0.5">
+                  <div className="text-[13px] text-black leading-[1.7] mt-0.5">
                     {parseInline(item.body.join(' '))}
                   </div>
                 )}
@@ -55,6 +55,24 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '',
       listItems = [];
       inList = false;
     }
+  };
+
+  // Auto-bold lead-in term before colon in bullet items (e.g. "뉴트럴 텍스처와 원목의 조화: 원목이...") even if ** was omitted
+  const parseListItemInline = (text: string): React.ReactNode[] => {
+    if (!text.includes('**')) {
+      const colonMatch = text.match(/^([^:：]{2,28})\s*(:|：)\s*(.+)$/);
+      if (colonMatch) {
+        return [
+          <strong key="lead" className="font-semibold text-black">
+            {colonMatch[1]}
+          </strong>,
+          <span key="rest">
+            {colonMatch[2]} {colonMatch[3]}
+          </span>,
+        ];
+      }
+    }
+    return parseInline(text);
   };
 
   const parseInline = (text: string): React.ReactNode[] => {
@@ -142,7 +160,7 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '',
           (nextNonEmpty.startsWith('  ') ||
            nextNonEmpty.startsWith('\t') ||
            (isOrderedList && /^\s*\d+\.\s+/.test(nextNonEmpty)) ||
-           (!isOrderedList && /^\s*[-*]\s+/.test(nextNonEmpty)))
+           (!isOrderedList && /^\s*[-*•]\s+/.test(nextNonEmpty)))
         ) {
           return;
         }
@@ -185,7 +203,7 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '',
     if (trimmed.startsWith('# ')) {
       flushList(index);
       elements.push(
-        <h1 key={index} className="text-2xl sm:text-3xl font-bold tracking-tight text-black mt-8 mb-4">
+        <h1 key={index} className="text-xl sm:text-2xl font-bold tracking-tight text-black mt-6 first:mt-0 mb-3">
           {parseInline(trimmed.replace(/^#\s+/, ''))}
         </h1>
       );
@@ -196,7 +214,7 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '',
     if (trimmed.startsWith('## ')) {
       flushList(index);
       elements.push(
-        <h2 key={index} className="text-xl sm:text-2xl font-bold tracking-tight text-black mt-7 mb-3">
+        <h2 key={index} className="text-lg sm:text-xl font-bold tracking-tight text-black mt-5 first:mt-0 mb-2.5">
           {parseInline(trimmed.replace(/^##\s+/, ''))}
         </h2>
       );
@@ -207,22 +225,22 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '',
     if (trimmed.startsWith('### ')) {
       flushList(index);
       elements.push(
-        <h3 key={index} className="text-lg font-bold tracking-tight text-black mt-5 mb-2">
+        <h3 key={index} className="text-[16px] sm:text-[17px] font-bold tracking-tight text-black mt-5 first:mt-0 mb-2.5 leading-snug">
           {parseInline(trimmed.replace(/^###\s+/, ''))}
         </h3>
       );
       return;
     }
 
-    // Unordered list item
-    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+    // Unordered list item (-, *, or •)
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('• ')) {
       if (!inList || isOrderedList) {
         flushList(index);
         inList = true;
         isOrderedList = false;
       }
       listItems.push({
-        title: trimmed.replace(/^[-*]\s+/, ''),
+        title: trimmed.replace(/^[-*•]\s+/, ''),
         body: [],
       });
       return;
@@ -246,15 +264,26 @@ export const MdxContent: React.FC<MdxContentProps> = ({ content, className = '',
     // Horizontal rule
     if (trimmed === '---' || trimmed === '***') {
       flushList(index);
-      elements.push(<hr key={index} className="my-8 border-t border-[rgba(0,0,0,0.15)]" />);
+      elements.push(<hr key={index} className="my-6 border-t border-[rgba(0,0,0,0.15)]" />);
       return;
     }
 
-    // Standard paragraph
+    // Standard paragraph (auto-bolds "Key : Value" labels like Location :, Role :, Scope : if ** was stripped)
     flushList(index);
+    const keyValMatch = !trimmed.includes('**')
+      ? trimmed.match(/^(Location|Role|Scope|Concept|Materials|Dimensions)\s*(:|：)\s*(.*)$/i)
+      : null;
+
     elements.push(
-      <p key={index} className="my-3 text-[13px] leading-relaxed text-black">
-        {parseInline(trimmed)}
+      <p key={index} className="my-1.5 first:mt-0 text-[13px] leading-[1.7] text-black">
+        {keyValMatch ? (
+          <>
+            <strong className="font-semibold text-black">{keyValMatch[1]}</strong> {keyValMatch[2]}{' '}
+            {parseInline(keyValMatch[3])}
+          </>
+        ) : (
+          parseInline(trimmed)
+        )}
       </p>
     );
   });

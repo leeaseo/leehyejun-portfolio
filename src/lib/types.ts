@@ -43,12 +43,43 @@ export interface ResumeData {
   resumePdf: string;
 }
 
+export interface ProcessStepItem {
+  step: string;
+  title: string;
+  description: string;
+  image?: string;
+}
+
+export interface ContributionPhase {
+  label: string;
+  percent: number;
+  note?: string;
+}
+
+export interface ProjectContribution {
+  totalPercent?: string;
+  role?: string;
+  phases?: ContributionPhase[];
+}
+
+export interface MoreProcessBlock {
+  id?: string;
+  title?: string;
+  images: string[];
+  description: string;
+}
+
 export interface WorkProject {
   title: string;
   slug: string;
   date: string;
+  brand?: string;
   thumbnail: string;
   images: string[];
+  processImages?: string[];
+  processSteps?: ProcessStepItem[];
+  contribution?: ProjectContribution;
+  moreBlocks?: MoreProcessBlock[];
   materials: string;
   dimensions: string;
   externalUrl?: string;
