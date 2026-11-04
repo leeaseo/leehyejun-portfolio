@@ -10,6 +10,7 @@ import {
   getExperienceProjects,
   getProjectBySlug,
   isExperienceSlug,
+  saveAllProjectsBatch,
   syncToServer,
 } from './lib/content';
 import { WorkProject, AboutData, ResumeData } from './lib/types';
@@ -111,73 +112,97 @@ export default function App() {
     }
   }, []);
 
-  // Load and sync content: 1) Server Content (if fresh) -> 2) Cloud Firestore (if fresh) -> 3) Bundled custom-data.json
+  // Load and sync content: Compare Cloud Firestore and /api/content by timestamp so the latest Admin edits always win on Desktop & Mobile
   useEffect(() => {
     async function loadAllContent() {
-      // 1. PRIMARY: Fetch latest verified server data (only if not stale)
-      try {
-        const res = await fetch('/api/content');
-        if (res.ok) {
-          const data = await res.json();
-          if (data) {
-            if (Array.isArray(data.projects) && data.projects.length > 0 && !isStaleProjectData(data.projects)) {
-              setProjectsList(data.projects);
-              idbSet('leehyejun_custom_projects', data.projects).catch(() => {});
-              try {
-                localStorage.setItem('leehyejun_custom_projects', JSON.stringify(data.projects));
-              } catch {}
-            }
-            if (Array.isArray(data.experiences) && data.experiences.length > 0) {
-              setExperienceProjectsList(data.experiences);
-              try {
-                localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(data.experiences));
-              } catch {}
-            }
-            if (data.about) setAboutData(data.about);
-            if (data.resume) setResumeData(data.resume);
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn('[Server] Could not sync with /api/content:', err);
+      let serverData: any = null;
+      let firestoreData: any = null;
+
+      const [serverRes, fsRes] = await Promise.allSettled([
+        fetch('/api/content').then((r) => (r.ok ? r.json() : null)),
+        fetchPortfolioFromFirestore(),
+      ]);
+
+      if (serverRes.status === 'fulfilled' && serverRes.value) {
+        serverData = serverRes.value;
+      }
+      if (fsRes.status === 'fulfilled' && fsRes.value) {
+        firestoreData = fsRes.value;
       }
 
-      // 2. SECONDARY: Fetch from Google Cloud Firestore (strictly ignore stale data)
-      try {
-        const firestoreData = await fetchPortfolioFromFirestore();
-        if (
-          firestoreData &&
-          Array.isArray(firestoreData.projects) &&
-          firestoreData.projects.length > 0 &&
-          !isStaleProjectData(firestoreData.projects)
-        ) {
-          const fsProjects = firestoreData.projects;
-          const workProjs = fsProjects.filter((p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100));
-          const expProjs = fsProjects.filter((p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100));
+      const serverTime = serverData?.exportedAt ? new Date(serverData.exportedAt).getTime() : 0;
+      const fsTime = firestoreData?.updatedAt
+        ? new Date(firestoreData.updatedAt).getTime()
+        : firestoreData?.exportedAt
+        ? new Date(firestoreData.exportedAt).getTime()
+        : 0;
 
-          if (workProjs.length > 0 && !isStaleProjectData(workProjs)) {
-            setProjectsList(workProjs);
-            idbSet('leehyejun_custom_projects', workProjs).catch(() => {});
-            try {
-              localStorage.setItem('leehyejun_custom_projects', JSON.stringify(workProjs));
-            } catch {}
-          }
-          if (expProjs.length > 0) {
-            setExperienceProjectsList(expProjs);
-            idbSet('leehyejun_custom_experiences', expProjs).catch(() => {});
-            try {
-              localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(expProjs));
-            } catch {}
-          }
-          if (firestoreData.about) setAboutData(firestoreData.about);
-          if (firestoreData.resume) setResumeData(firestoreData.resume);
-          return;
+      const hasValidFs =
+        firestoreData &&
+        Array.isArray(firestoreData.projects) &&
+        firestoreData.projects.length > 0 &&
+        !isStaleProjectData(firestoreData.projects);
+
+      const hasValidServer =
+        serverData &&
+        Array.isArray(serverData.projects) &&
+        serverData.projects.length > 0 &&
+        !isStaleProjectData(serverData.projects);
+
+      // Prefer Firestore if it has valid data and is newer than (or equal to) server data
+      if (hasValidFs && (!hasValidServer || fsTime >= serverTime)) {
+        const fsProjects = firestoreData.projects;
+        const workProjs = fsProjects.filter(
+          (p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100)
+        );
+        const expProjs = fsProjects.filter(
+          (p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100)
+        );
+
+        saveAllProjectsBatch(
+          workProjs.length > 0 ? workProjs : getAllProjects(),
+          expProjs.length > 0 ? expProjs : getExperienceProjects()
+        );
+
+        if (workProjs.length > 0) {
+          setProjectsList(workProjs);
         }
-      } catch (err) {
-        console.warn('[Firestore] Client fetch:', err);
+        if (expProjs.length > 0) {
+          setExperienceProjectsList(expProjs);
+        }
+        if (firestoreData.about) setAboutData(firestoreData.about);
+        if (firestoreData.resume) setResumeData(firestoreData.resume);
+
+        // If Firestore is newer than server file, sync back to server custom-data.json
+        if (fsTime > serverTime) {
+          syncToServer({
+            projects: workProjs,
+            experiences: expProjs.length > 0 ? expProjs : serverData?.experiences,
+            about: firestoreData.about || serverData?.about,
+            resume: firestoreData.resume || serverData?.resume,
+          });
+        }
+        return;
       }
 
-      // 3. FALLBACK: Always ensure state is loaded with fresh bundled custom-data.json
+      if (hasValidServer) {
+        saveAllProjectsBatch(
+          serverData.projects,
+          Array.isArray(serverData.experiences) && serverData.experiences.length > 0
+            ? serverData.experiences
+            : getExperienceProjects()
+        );
+        setProjectsList(serverData.projects);
+
+        if (Array.isArray(serverData.experiences) && serverData.experiences.length > 0) {
+          setExperienceProjectsList(serverData.experiences);
+        }
+        if (serverData.about) setAboutData(serverData.about);
+        if (serverData.resume) setResumeData(serverData.resume);
+        return;
+      }
+
+      // 3. FALLBACK: Bundled custom-data.json
       try {
         const bundled = getAllProjects();
         const bundledExp = getExperienceProjects();
