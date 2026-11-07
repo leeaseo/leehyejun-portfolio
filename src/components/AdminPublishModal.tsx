@@ -583,11 +583,48 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       onBatchUpdated?.(exportProjects, exportExperiences);
     }
 
+    // Ensure any dynamically generated image path (-recovered-, -block) is embedded as base64 for 100% standalone GitHub upload
+    const embedDynamicPath = async (imgUrl: string): Promise<string> => {
+      if (!imgUrl || imgUrl.startsWith('data:') || imgUrl.startsWith('http')) return imgUrl;
+      if (imgUrl.includes('-recovered-') || imgUrl.includes('-block')) {
+        try {
+          const res = await fetch(imgUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            return await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve((reader.result as string) || imgUrl);
+              reader.onerror = () => resolve(imgUrl);
+              reader.readAsDataURL(blob);
+            });
+          }
+        } catch {}
+      }
+      return imgUrl;
+    };
+
+    const standaloneProjects = await Promise.all(
+      exportProjects.map(async (p) => ({
+        ...p,
+        thumbnail: await embedDynamicPath(p.thumbnail),
+        images: await Promise.all((p.images || []).map(embedDynamicPath)),
+        processImages: await Promise.all((p.processImages || []).map(embedDynamicPath)),
+        moreBlocks: p.moreBlocks
+          ? await Promise.all(
+              p.moreBlocks.map(async (b) => ({
+                ...b,
+                images: await Promise.all((b.images || []).map(embedDynamicPath)),
+              }))
+            )
+          : undefined,
+      }))
+    );
+
     const nowIso = new Date().toISOString();
     const data = {
       about: aboutForm || getAboutData(),
       resume: resumeForm || getResumeData(),
-      projects: exportProjects,
+      projects: standaloneProjects,
       experiences: exportExperiences,
       updatedAt: nowIso,
       exportedAt: nowIso,

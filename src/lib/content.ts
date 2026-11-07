@@ -323,15 +323,6 @@ export function isExperienceSlug(slug?: string): boolean {
 
 function isStaleProjectList(projs?: WorkProject[]): boolean {
   if (!projs || !Array.isArray(projs) || projs.length === 0) return true;
-  const p0 = projs.find((p) => p.slug === 'mobile-display-system');
-  if (
-    p0 &&
-    (!p0.moreBlocks ||
-      p0.moreBlocks.length < 4 ||
-      (p0.moreBlocks.length === 3 && p0.moreBlocks[2]?.title === '디자인 방향성'))
-  ) {
-    return true;
-  }
   return projs.some(
     (p) =>
       p.title === 'Mobile Display System' ||
@@ -346,29 +337,26 @@ export function getCustomProjects(): WorkProject[] {
   // 1. Check in-memory cache first (if not stale)
   if (memoryCustomProjects && memoryCustomProjects.length > 0 && !isStaleProjectList(memoryCustomProjects)) {
     list = memoryCustomProjects;
+  } else if (
+    (customDataJson as any)?.projects &&
+    Array.isArray((customDataJson as any).projects) &&
+    (customDataJson as any).projects.length > 0
+  ) {
+    // 2. Primary: Bundled custom-data.json (Git repository source of truth — never reject!)
+    list = (customDataJson as any).projects;
+    memoryCustomProjects = list;
   } else {
-    // 2. Primary: Bundled custom-data.json (Git repository source of truth)
-    if (
-      (customDataJson as any)?.projects &&
-      Array.isArray((customDataJson as any).projects) &&
-      (customDataJson as any).projects.length > 0 &&
-      !isStaleProjectList((customDataJson as any).projects)
-    ) {
-      list = (customDataJson as any).projects;
-      memoryCustomProjects = list;
-    } else {
-      // 3. Fallback: localStorage
-      try {
-        const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_projects') : null;
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0 && !isStaleProjectList(parsed)) {
-            memoryCustomProjects = parsed;
-            list = parsed;
-          }
+    // 3. Fallback: localStorage
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('leehyejun_custom_projects') : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0 && !isStaleProjectList(parsed)) {
+          memoryCustomProjects = parsed;
+          list = parsed;
         }
-      } catch {}
-    }
+      }
+    } catch {}
   }
 
   // Strictly filter out any experience projects (order >= 100 or experience slugs)

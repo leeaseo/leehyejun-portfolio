@@ -307,12 +307,14 @@ async function startServer() {
         })
       );
 
-      // Automatically convert any base64 images into static image files in public/images/work for GitHub/disk
-      const processedPayload = extractAndSaveBase64Images(payload);
+      // Also write static image files to public/images/work on local disk without stripping base64 from custom-data.json
+      try {
+        extractAndSaveBase64Images(JSON.parse(JSON.stringify(payload)));
+      } catch {}
 
       const updated = {
         ...current,
-        ...processedPayload,
+        ...payload,
         updatedAt: nowIso,
         exportedAt: nowIso,
       };

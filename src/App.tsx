@@ -82,18 +82,9 @@ export default function App() {
     }
   }, [mobileTab]);
 
-  // Robust check for stale placeholder data or pre-recovery 3-block Yeonhui duplicate
+  // Robust check for stale placeholder data
   const isStaleProjectData = (projs?: WorkProject[]): boolean => {
     if (!projs || !Array.isArray(projs) || projs.length === 0) return true;
-    const p0 = projs.find((p) => p.slug === 'mobile-display-system');
-    if (
-      p0 &&
-      (!p0.moreBlocks ||
-        p0.moreBlocks.length < 4 ||
-        (p0.moreBlocks.length === 3 && p0.moreBlocks[2]?.title === '디자인 방향성'))
-    ) {
-      return true;
-    }
     return projs.some(
       (p) =>
         p.title === 'Mobile Display System' ||
@@ -417,11 +408,11 @@ export default function App() {
       </header>
 
       {/* Main 3-Column Grid Container (1:1:1 exact ratio on desktop) */}
-      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-3 min-h-0 lg:overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[rgba(0,0,0,0.15)]">
+      <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] min-h-0 lg:overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[rgba(0,0,0,0.15)]">
         {/* Column 1: About & Resume & Work (Left - 1/3) */}
         <section
           ref={aboutSectionRef}
-          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
+          className={`w-full min-w-0 min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto column-scroll ${
             mobileTab === 'about' ? 'block' : 'hidden lg:block'
           }`}
         >
@@ -437,7 +428,7 @@ export default function App() {
         {/* Column 2: Photo - Final Product Shoot Gallery (Middle - 1/3) */}
         <section
           ref={workSectionRef}
-          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
+          className={`w-full min-w-0 min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto column-scroll ${
             mobileTab === 'work' ? 'block' : 'hidden lg:block'
           }`}
         >
@@ -453,7 +444,7 @@ export default function App() {
         {/* Column 3: More - Product Development Process & Specs (Right - 1/3) */}
         <section
           ref={moreSectionRef}
-          className={`w-full min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto ${
+          className={`w-full min-w-0 min-h-[calc(100vh-80px)] lg:min-h-0 lg:h-full lg:overflow-y-auto column-scroll ${
             mobileTab === 'more' ? 'block' : 'hidden lg:block'
           }`}
         >
