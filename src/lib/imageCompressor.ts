@@ -49,9 +49,15 @@ export async function compressImageFile(
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert to high-quality JPEG for crisp clarity
-        const mimeType = file.type === 'image/png' && file.size < 1.5 * 1024 * 1024 ? 'image/png' : 'image/jpeg';
-        const dataUrl = canvas.toDataURL(mimeType, quality);
+        // Convert to high-quality JPEG for crisp clarity and guaranteed <650KB Firestore single-doc safety
+        const mimeType = file.type === 'image/png' && file.size < 400 * 1024 ? 'image/png' : 'image/jpeg';
+        let dataUrl = canvas.toDataURL(mimeType, quality);
+        if (dataUrl.length > 650000) {
+          dataUrl = canvas.toDataURL('image/jpeg', 0.84);
+        }
+        if (dataUrl.length > 650000) {
+          dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        }
         resolve(dataUrl);
       };
       img.src = e.target?.result as string;

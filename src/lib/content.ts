@@ -10,11 +10,37 @@ import { DEFAULT_EXPERIENCE_PROJECTS } from './experienceData';
 let memoryCustomProjects: WorkProject[] | null = null;
 let memoryExperienceProjects: WorkProject[] | null = null;
 
-// Primary initialization from bundled custom-data.json (Git repository source of truth)
-if ((customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects)) {
+// Initialize from newer localStorage if available, otherwise bundled custom-data.json
+try {
+  if (typeof window !== 'undefined') {
+    const localTimeStr = localStorage.getItem('leehyejun_local_updated_at');
+    const localTime = localTimeStr ? new Date(localTimeStr).getTime() : 0;
+    const bundledTimeStr = (customDataJson as any)?.updatedAt || (customDataJson as any)?.exportedAt;
+    const bundledTime = bundledTimeStr ? new Date(bundledTimeStr).getTime() : 0;
+
+    if (localTime >= bundledTime) {
+      const rawProjs = localStorage.getItem('leehyejun_custom_projects');
+      if (rawProjs) {
+        const parsed = JSON.parse(rawProjs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          memoryCustomProjects = parsed;
+        }
+      }
+      const rawExps = localStorage.getItem('leehyejun_custom_experiences');
+      if (rawExps) {
+        const parsedExp = JSON.parse(rawExps);
+        if (Array.isArray(parsedExp) && parsedExp.length > 0) {
+          memoryExperienceProjects = parsedExp;
+        }
+      }
+    }
+  }
+} catch {}
+
+if (!memoryCustomProjects && (customDataJson as any)?.projects && Array.isArray((customDataJson as any).projects)) {
   memoryCustomProjects = (customDataJson as any).projects;
 }
-if ((customDataJson as any)?.experiences && Array.isArray((customDataJson as any).experiences)) {
+if (!memoryExperienceProjects && (customDataJson as any)?.experiences && Array.isArray((customDataJson as any).experiences)) {
   memoryExperienceProjects = (customDataJson as any).experiences;
 }
 
@@ -180,21 +206,30 @@ export async function syncToServer(data: {
   resume?: ResumeData;
 }): Promise<void> {
   if (typeof window === 'undefined') return;
-  // 1. Primary: Save immediately to server disk via /api/publish
+  const nowIso = new Date().toISOString();
   try {
-    await fetch('/api/publish', {
+    idbSet('leehyejun_custom_meta', { updatedAt: nowIso }).catch(() => {});
+    localStorage.setItem('leehyejun_local_updated_at', nowIso);
+  } catch {}
+
+  let serverHandled = false;
+  try {
+    const res = await fetch('/api/publish', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    if (res.ok) {
+      serverHandled = true;
+    }
   } catch (err) {
     console.warn('Sync to server warning:', err);
   }
-  // 2. Secondary: Fire and forget Firestore save without blocking
-  try {
-    savePortfolioToFirestore(data).catch(() => {});
-  } catch (err) {
-    console.warn('[Firestore] Client sync error:', err);
+
+  if (!serverHandled) {
+    await savePortfolioToFirestore(data).catch((err) => {
+      console.warn('[Firestore] Client sync error:', err);
+    });
   }
 }
 
@@ -448,6 +483,12 @@ export function getExperienceProjects(): WorkProject[] {
         ...exp,
         title: match.title || exp.title,
         date: match.date || exp.date,
+        brand: match.brand !== undefined ? match.brand : exp.brand,
+        processScope: match.processScope !== undefined ? match.processScope : exp.processScope,
+        customSpecs: match.customSpecs !== undefined ? match.customSpecs : exp.customSpecs,
+        moreBlocks: match.moreBlocks !== undefined ? match.moreBlocks : exp.moreBlocks,
+        contribution: match.contribution !== undefined ? match.contribution : exp.contribution,
+        processImages: match.processImages !== undefined ? match.processImages : exp.processImages,
         materials: match.materials !== undefined ? match.materials : exp.materials,
         dimensions: match.dimensions !== undefined ? match.dimensions : exp.dimensions,
         content: match.content !== undefined ? match.content : exp.content,
@@ -486,21 +527,33 @@ export function saveExperienceProject(project: WorkProject): void {
   } catch (err) {
     console.warn('LocalStorage error on experience project save:', err);
   }
-  syncToServer({ experiences: updated });
 }
 
-export function saveAllProjectsBatch(projects: WorkProject[], experiences: WorkProject[]): void {
+export function saveAllProjectsBatch(
+  projects: WorkProject[],
+  experiences: WorkProject[],
+  skipNetworkSync = false
+): void {
   memoryCustomProjects = projects;
   memoryExperienceProjects = experiences;
   if (typeof window !== 'undefined') {
     idbSet('leehyejun_custom_projects', projects).catch(() => {});
     idbSet('leehyejun_custom_experiences', experiences).catch(() => {});
+    if (!skipNetworkSync) {
+      const nowIso = new Date().toISOString();
+      idbSet('leehyejun_custom_meta', { updatedAt: nowIso }).catch(() => {});
+      try {
+        localStorage.setItem('leehyejun_local_updated_at', nowIso);
+      } catch {}
+    }
     try {
       localStorage.setItem('leehyejun_custom_projects', JSON.stringify(projects));
       localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(experiences));
     } catch {}
   }
-  syncToServer({ projects, experiences });
+  if (!skipNetworkSync) {
+    syncToServer({ projects, experiences });
+  }
 }
 
 export function getProjectBySlug(slug: string): WorkProject | undefined {

@@ -31,6 +31,7 @@ import {
 } from '../lib/content';
 import { getHonorSlug } from '../lib/experienceData';
 import { savePortfolioToFirestore, deleteProjectFromFirestore } from '../lib/firebase';
+import { idbGet, idbSet } from '../lib/idbStorage';
 import { compressImageFile } from '../lib/imageCompressor';
 import {
   X,
@@ -187,8 +188,10 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const [resumeForm, setResumeForm] = useState<ResumeData>(getResumeData);
 
   const [isSaved, setIsSaved] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   const loadProjectIntoForm = (proj: WorkProject) => {
+    isInitialLoadRef.current = true;
     setEditingSlug(proj.slug);
     setTitle(proj.title || '');
     setSlug(proj.slug);
@@ -252,28 +255,49 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setWorkTab('editor');
   };
 
-  // Auto-select first project (#1) or specified project on open
+  // Auto-select first project (#1) or specified project on open, preferring IndexedDB if available
   React.useEffect(() => {
     if (isAuthenticated) {
-      const pList = getAllProjects();
-      const expList = getExperienceProjects();
-      setDraftProjects(pList);
-      setDraftExperiences(expList);
-      setProjectsList(pList);
+      let cancelled = false;
+      async function initAdminDrafts() {
+        let pList = getAllProjects();
+        let expList = getExperienceProjects();
+        try {
+          const [idbProjs, idbExps] = await Promise.all([
+            idbGet<WorkProject[]>('leehyejun_custom_projects'),
+            idbGet<WorkProject[]>('leehyejun_custom_experiences'),
+          ]);
+          if (Array.isArray(idbProjs) && idbProjs.length > 0) {
+            pList = idbProjs;
+          }
+          if (Array.isArray(idbExps) && idbExps.length > 0) {
+            expList = idbExps;
+          }
+        } catch {}
 
-      if (initialEditingProject) {
-        setMainSection('work');
-        setWorkTab('editor');
-        const isExp =
-          (typeof initialEditingProject.order === 'number' && initialEditingProject.order >= 100) ||
-          isExperienceSlug(initialEditingProject.slug);
-        const target = isExp
-          ? expList.find((e) => e.slug === initialEditingProject.slug) || initialEditingProject
-          : pList.find((p) => p.slug === initialEditingProject.slug) || initialEditingProject;
-        loadProjectIntoForm(target);
-      } else if (!editingSlug && pList.length > 0) {
-        loadProjectIntoForm(pList[0]);
+        if (cancelled) return;
+        setDraftProjects(pList);
+        setDraftExperiences(expList);
+        setProjectsList(pList);
+
+        if (initialEditingProject) {
+          setMainSection('work');
+          setWorkTab('editor');
+          const isExp =
+            (typeof initialEditingProject.order === 'number' && initialEditingProject.order >= 100) ||
+            isExperienceSlug(initialEditingProject.slug);
+          const target = isExp
+            ? expList.find((e) => e.slug === initialEditingProject.slug) || initialEditingProject
+            : pList.find((p) => p.slug === initialEditingProject.slug) || initialEditingProject;
+          loadProjectIntoForm(target);
+        } else if (!editingSlug && pList.length > 0) {
+          loadProjectIntoForm(pList[0]);
+        }
       }
+      initAdminDrafts();
+      return () => {
+        cancelled = true;
+      };
     }
   }, [isAuthenticated, initialEditingProject]);
 
@@ -359,6 +383,108 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     }
     setModifiedSlugs((prev) => new Set(prev).add(targetSlug));
   };
+
+  // Real-time auto-save: whenever photos or fields are edited in the Admin modal, immediately persist to IndexedDB & sync in background so nothing is ever lost on refresh
+  const isInitialLoadRef = useRef(true);
+  React.useEffect(() => {
+    if (!isAuthenticated || !editingSlug) return;
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const activeTitle = title.trim();
+      if (!editingSlug && !activeTitle) return;
+      const targetSlug = editingSlug;
+
+      const syncedContent =
+        moreBlocks.length > 0
+          ? moreBlocks
+              .map((b) => `${b.title ? `### ${b.title}\n` : ''}${b.description || ''}`.trim())
+              .filter(Boolean)
+              .join('\n\n')
+          : content;
+
+      const cleanedSpecs = customSpecs
+        .filter((s) => s.label.trim() !== '')
+        .map((s) => ({ label: s.label.trim(), value: s.value }));
+
+      const findSpecVal = (lbl: string, fallback: string) => {
+        const found = cleanedSpecs.find((s) => s.label.toLowerCase() === lbl.toLowerCase());
+        return found ? found.value : fallback;
+      };
+
+      const currentData: WorkProject = {
+        title: activeTitle || 'Untitled',
+        slug: targetSlug,
+        date: date || '2026',
+        brand: findSpecVal('brand', brand),
+        processScope: findSpecVal('process scope', processScope),
+        customSpecs: cleanedSpecs,
+        thumbnail: thumbnail || '',
+        images: detailImages,
+        processImages: processImages,
+        contribution: {
+          phases: contributionPhases.filter((ph) => ph.label.trim() !== ''),
+        },
+        moreBlocks: moreBlocks,
+        materials: findSpecVal('materials', materials),
+        dimensions: findSpecVal('dimensions', dimensions),
+        externalUrl: externalUrl || undefined,
+        order: Number(order) || 1,
+        content: syncedContent || content || '프로젝트 상세 내용입니다.',
+      };
+
+      const isExp =
+        Number(order) >= 100 ||
+        isExperienceSlug(targetSlug) ||
+        draftExperiences.some((e) => e.slug === targetSlug);
+
+      const nextProjects = isExp
+        ? draftProjects
+        : draftProjects
+            .map((p) => (p.slug === targetSlug ? { ...p, ...currentData } : p))
+            .sort((a, b) => (a.order || 99) - (b.order || 99));
+
+      const nextExperiences = isExp
+        ? draftExperiences.map((e) => (e.slug === targetSlug ? { ...e, ...currentData } : e))
+        : draftExperiences;
+
+      setDraftProjects(nextProjects);
+      setDraftExperiences(nextExperiences);
+      saveAllProjectsBatch(nextProjects, nextExperiences, true);
+      const nowIso = new Date().toISOString();
+      idbSet('leehyejun_custom_meta', { updatedAt: nowIso }).catch(() => {});
+      try {
+        localStorage.setItem('leehyejun_local_updated_at', nowIso);
+      } catch {}
+      onBatchUpdated?.(nextProjects, nextExperiences);
+
+      // Save only the currently edited project to Cloud Firestore in background (no disk write reload)
+      savePortfolioToFirestore(
+        isExp ? { experiences: [currentData] } : { projects: [currentData] }
+      ).catch(() => {});
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [
+    title,
+    date,
+    brand,
+    materials,
+    dimensions,
+    processScope,
+    customSpecs,
+    order,
+    externalUrl,
+    content,
+    thumbnail,
+    detailImages,
+    processImages,
+    contributionPhases,
+    moreBlocks,
+  ]);
 
   const thumbnailFileInputRef = useRef<HTMLInputElement>(null);
   const detailFileInputRef = useRef<HTMLInputElement>(null);
@@ -523,119 +649,147 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     }
   };
 
-  // Work 대표사진 파일 업로드 -> 크롭 모달 열기
-  const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const rawSrc = event.target?.result as string;
-        if (rawSrc) {
-          setCropperState({
-            isOpen: true,
-            type: 'thumbnail',
-            imageSrc: rawSrc,
-            title: 'Work 대표사진 자르기 & 비율 조절',
-            subtitle: '메인 피드 카드에 노출될 대표 이미지',
-            queue: [{ rawSrc, file }],
-            queueIndex: 0,
+  // Helper: Convert FileList or File[] directly to high-res optimized Data URLs without forcing cropper popup
+  const compressFilesToDataUrls = async (fileList: FileList | File[]): Promise<string[]> => {
+    const files = Array.from(fileList).filter(
+      (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(f.name)
+    );
+    if (files.length === 0) return [];
+    setIsCompressing(true);
+    try {
+      const results: string[] = [];
+      for (const file of files) {
+        try {
+          const comp = await compressImageFile(file, 2560, 0.92);
+          results.push(comp);
+        } catch {
+          const fallback = await new Promise<string>((res) => {
+            const r = new FileReader();
+            r.onload = () => res((r.result as string) || '');
+            r.readAsDataURL(file);
           });
+          if (fallback) results.push(fallback);
         }
-      };
-      reader.readAsDataURL(file);
+      }
+      return results;
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
+  const hasDraggedFiles = (e: React.DragEvent): boolean => {
+    if (!e.dataTransfer?.types) return false;
+    return Array.from(e.dataTransfer.types).includes('Files');
+  };
+
+  // File Dropzone highlight states
+  const [isFileDragOverThumb, setIsFileDragOverThumb] = useState(false);
+  const [isFileDragOverDetail, setIsFileDragOverDetail] = useState(false);
+  const [fileDragOverBlockIdx, setFileDragOverBlockIdx] = useState<number | null>(null);
+
+  // 1. Work 대표사진 파일 업로드 (즉시 첨부 + 필요시 자르기 옵션 사용)
+  const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const urls = await compressFilesToDataUrls([files[0]]);
+      if (urls[0]) {
+        setThumbnail(urls[0]);
+      }
       e.target.value = '';
     }
   };
 
-  // Photo 탭 추가 촬영컷 파일 업로드 (여러 장 선택 지원) -> 크롭 큐 순차 처리
+  const handleThumbnailFileDrop = async (e: React.DragEvent) => {
+    if (!hasDraggedFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsFileDragOverThumb(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const urls = await compressFilesToDataUrls([e.dataTransfer.files[0]]);
+      if (urls[0]) {
+        setThumbnail(urls[0]);
+      }
+    }
+  };
+
+  // 2. Photo 탭 추가 촬영컷 파일 업로드 (여러 장 즉시 첨부 + 개별 자르기 버튼 지원)
   const handleDetailImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const queue: { rawSrc: string; file?: File }[] = [];
-      for (const file of Array.from(files)) {
-        const rawSrc = await new Promise<string>((res) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result as string);
-          r.readAsDataURL(file);
-        });
-        queue.push({ rawSrc, file });
-      }
-
-      if (queue.length > 0) {
-        setCropperState({
-          isOpen: true,
-          type: 'detail-new',
-          imageSrc: queue[0].rawSrc,
-          title: queue.length > 1 ? `Photo 촬영컷 자르기 (1 / ${queue.length})` : 'Photo 촬영컷 자르기 & 비율 조절',
-          subtitle: '가운데 Photo 탭에 노출될 제품 최종 촬영 이미지',
-          queue,
-          queueIndex: 0,
-        });
+      const urls = await compressFilesToDataUrls(files);
+      if (urls.length > 0) {
+        setDetailImages((prev) => [...prev, ...urls]);
       }
       e.target.value = '';
     }
   };
 
-  // More 탭 디벨롭 & 양산화 과정 (비핸스 갤러리) 이미지 파일 업로드
+  const handleDetailFileDrop = async (e: React.DragEvent) => {
+    if (!hasDraggedFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsFileDragOverDetail(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const urls = await compressFilesToDataUrls(e.dataTransfer.files);
+      if (urls.length > 0) {
+        setDetailImages((prev) => [...prev, ...urls]);
+      }
+    }
+  };
+
+  // 3. More 탭 디벨롭 & 양산화 과정 이미지 파일 업로드 (즉시 첨부)
   const handleProcessImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const queue: { rawSrc: string; file?: File }[] = [];
-      for (const file of Array.from(files)) {
-        const rawSrc = await new Promise<string>((res) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result as string);
-          r.readAsDataURL(file);
-        });
-        queue.push({ rawSrc, file });
-      }
-
-      if (queue.length > 0) {
-        setCropperState({
-          isOpen: true,
-          type: 'process-new',
-          imageSrc: queue[0].rawSrc,
-          title: queue.length > 1 ? `More 양산화/디벨롭 보드 자르기 (1 / ${queue.length})` : 'More 양산화/디벨롭 보드 자르기 & 비율 조절',
-          subtitle: '맨 오른쪽 More 탭에 노출될 디벨롭·양산화 과정 이미지',
-          queue,
-          queueIndex: 0,
-        });
+      const urls = await compressFilesToDataUrls(files);
+      if (urls.length > 0) {
+        setProcessImages((prev) => [...prev, ...urls]);
       }
       e.target.value = '';
     }
   };
 
-  // More 탭 특정 블록(1.1, 1.2, 1.3...)에 이미지 파일 업로드
+  // 4. More 탭 특정 블록(1.1, 1.2, 1.3...)에 이미지 파일 업로드 (즉시 첨부 + 개별 자르기 버튼 지원)
   const handleBlockImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     const targetBlockIdx = activeBlockUploadIdx;
     if (files && files.length > 0) {
-      const queue: { rawSrc: string; file?: File }[] = [];
-      for (const file of Array.from(files)) {
-        const rawSrc = await new Promise<string>((res) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result as string);
-          r.readAsDataURL(file);
-        });
-        queue.push({ rawSrc, file });
-      }
-
-      if (queue.length > 0) {
-        setCropperState({
-          isOpen: true,
-          type: 'block-new',
-          blockIndex: targetBlockIdx,
-          imageSrc: queue[0].rawSrc,
-          title:
-            queue.length > 1
-              ? `More 블록 #${targetBlockIdx + 1} 이미지 자르기 (1 / ${queue.length})`
-              : `More 블록 #${targetBlockIdx + 1} 이미지 자르기 & 비율 조절`,
-          subtitle: `블록 #${targetBlockIdx + 1}의 대표(${targetBlockIdx + 1}.1) 및 서브 이미지`,
-          queue,
-          queueIndex: 0,
+      const urls = await compressFilesToDataUrls(files);
+      if (urls.length > 0) {
+        setMoreBlocks((prev) => {
+          const next = [...prev];
+          if (next[targetBlockIdx]) {
+            next[targetBlockIdx] = {
+              ...next[targetBlockIdx],
+              images: [...(next[targetBlockIdx].images || []), ...urls],
+            };
+          }
+          return next;
         });
       }
       e.target.value = '';
+    }
+  };
+
+  const handleBlockFileDrop = async (e: React.DragEvent, targetBlockIdx: number) => {
+    if (!hasDraggedFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragOverBlockIdx(null);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const urls = await compressFilesToDataUrls(e.dataTransfer.files);
+      if (urls.length > 0) {
+        setMoreBlocks((prev) => {
+          const next = [...prev];
+          if (next[targetBlockIdx]) {
+            next[targetBlockIdx] = {
+              ...next[targetBlockIdx],
+              images: [...(next[targetBlockIdx].images || []), ...urls],
+            };
+          }
+          return next;
+        });
+      }
     }
   };
 
@@ -745,130 +899,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
 
   // 크롭 건너뛰기 (원본 그대로 사용) 콜백
   const handleCropSkip = async () => {
-    if (cropperState.type === 'thumbnail') {
-      const item = cropperState.queue?.[0];
-      try {
-        setIsCompressing(true);
-        const comp = item?.file
-          ? await compressImageFile(item.file, 2560, 0.92)
-          : cropperState.imageSrc;
-        setThumbnail(comp);
-      } catch (err) {
-        console.error(err);
-        setThumbnail(cropperState.imageSrc);
-      } finally {
-        setIsCompressing(false);
-      }
-      setCropperState((prev) => ({ ...prev, isOpen: false }));
-    } else if (cropperState.type === 'detail-new') {
-      const currentQueue = cropperState.queue || [];
-      const currentIdx = cropperState.queueIndex || 0;
-      const item = currentQueue[currentIdx];
-      const nextIdx = currentIdx + 1;
-
-      try {
-        setIsCompressing(true);
-        const comp = item?.file
-          ? await compressImageFile(item.file, 2560, 0.92)
-          : item.rawSrc;
-        setDetailImages((prev) => [...prev, comp]);
-      } catch (err) {
-        console.error(err);
-        setDetailImages((prev) => [...prev, item.rawSrc]);
-      } finally {
-        setIsCompressing(false);
-      }
-
-      if (nextIdx < currentQueue.length) {
-        setCropperState((prev) => ({
-          ...prev,
-          imageSrc: currentQueue[nextIdx].rawSrc,
-          queueIndex: nextIdx,
-          title: `Photo 촬영컷 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
-        }));
-      } else {
-        setCropperState((prev) => ({ ...prev, isOpen: false }));
-      }
-    } else if (cropperState.type === 'process-new') {
-      const currentQueue = cropperState.queue || [];
-      const currentIdx = cropperState.queueIndex || 0;
-      const item = currentQueue[currentIdx];
-      const nextIdx = currentIdx + 1;
-
-      try {
-        setIsCompressing(true);
-        const comp = item?.file
-          ? await compressImageFile(item.file, 2560, 0.92)
-          : item.rawSrc;
-        setProcessImages((prev) => [...prev, comp]);
-      } catch (err) {
-        console.error(err);
-        setProcessImages((prev) => [...prev, item.rawSrc]);
-      } finally {
-        setIsCompressing(false);
-      }
-
-      if (nextIdx < currentQueue.length) {
-        setCropperState((prev) => ({
-          ...prev,
-          imageSrc: currentQueue[nextIdx].rawSrc,
-          queueIndex: nextIdx,
-          title: `More 양산화/디벨롭 보드 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
-        }));
-      } else {
-        setCropperState((prev) => ({ ...prev, isOpen: false }));
-      }
-    } else if (cropperState.type === 'block-new') {
-      const currentQueue = cropperState.queue || [];
-      const currentIdx = cropperState.queueIndex || 0;
-      const item = currentQueue[currentIdx];
-      const nextIdx = currentIdx + 1;
-      const bIdx = cropperState.blockIndex ?? 0;
-
-      try {
-        setIsCompressing(true);
-        const comp = item?.file
-          ? await compressImageFile(item.file, 2560, 0.92)
-          : item.rawSrc;
-        setMoreBlocks((prev) => {
-          const next = [...prev];
-          if (next[bIdx]) {
-            next[bIdx] = {
-              ...next[bIdx],
-              images: [...(next[bIdx].images || []), comp],
-            };
-          }
-          return next;
-        });
-      } catch (err) {
-        console.error(err);
-        setMoreBlocks((prev) => {
-          const next = [...prev];
-          if (next[bIdx]) {
-            next[bIdx] = {
-              ...next[bIdx],
-              images: [...(next[bIdx].images || []), item.rawSrc],
-            };
-          }
-          return next;
-        });
-      } finally {
-        setIsCompressing(false);
-      }
-
-      if (nextIdx < currentQueue.length) {
-        setCropperState((prev) => ({
-          ...prev,
-          imageSrc: currentQueue[nextIdx].rawSrc,
-          queueIndex: nextIdx,
-          title: `More 블록 #${bIdx + 1} 이미지 자르기 (${nextIdx + 1} / ${currentQueue.length})`,
-        }));
-      } else {
-        setCropperState((prev) => ({ ...prev, isOpen: false }));
-      }
-    } else {
-      setCropperState((prev) => ({ ...prev, isOpen: false }));
-    }
+    setCropperState((prev) => ({ ...prev, isOpen: false }));
   };
 
   const handleAddDetailUrl = () => {
@@ -904,36 +935,321 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     });
   };
 
-  // Drag and drop states for detail images reordering
+  // ============================================================================
+  // DRAG & DROP REORDERING STATES & HANDLERS (ALL LISTS & GRIDS)
+  // ============================================================================
+
+  // 1. Work Projects Reordering (1 ~ N)
+  const [draggedProjectIdx, setDraggedProjectIdx] = useState<number | null>(null);
+  const [dragOverProjectIdx, setDragOverProjectIdx] = useState<number | null>(null);
+
+  const handleDragStartProject = (e: React.DragEvent, index: number) => {
+    e.stopPropagation();
+    setDraggedProjectIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', `project:${index}`);
+    } catch {}
+  };
+
+  const handleDragEnterProject = (e: React.DragEvent, index: number) => {
+    if (draggedProjectIdx === null || draggedProjectIdx === index) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverProjectIdx(index);
+  };
+
+  const handleDragOverProject = (e: React.DragEvent) => {
+    if (draggedProjectIdx === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropProject = (e: React.DragEvent, targetIndex: number) => {
+    if (draggedProjectIdx === null || draggedProjectIdx === targetIndex) {
+      setDraggedProjectIdx(null);
+      setDragOverProjectIdx(null);
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+
+    const copy = [...draftProjects];
+    const [moved] = copy.splice(draggedProjectIdx, 1);
+    copy.splice(targetIndex, 0, moved);
+    const reordered = copy.map((proj, idx) => ({
+      ...proj,
+      order: idx + 1,
+    }));
+
+    setDraftProjects(reordered);
+    setProjectsList(reordered);
+
+    if (editingSlug) {
+      const activeMatch = reordered.find((p) => p.slug === editingSlug);
+      if (activeMatch && typeof activeMatch.order === 'number') {
+        setOrder(activeMatch.order);
+      }
+    }
+
+    saveAllProjectsBatch(reordered, draftExperiences, true);
+    onBatchUpdated?.(reordered, draftExperiences);
+    savePortfolioToFirestore({ projects: reordered }).catch(() => {});
+
+    setDraggedProjectIdx(null);
+    setDragOverProjectIdx(null);
+  };
+
+  const handleDragEndProject = () => {
+    setDraggedProjectIdx(null);
+    setDragOverProjectIdx(null);
+  };
+
+  // 2. Specs Reordering (Brand, Materials, Dimensions, Process Scope...)
+  const [draggedSpecIdx, setDraggedSpecIdx] = useState<number | null>(null);
+  const [dragOverSpecIdx, setDragOverSpecIdx] = useState<number | null>(null);
+
+  const handleDragStartSpec = (e: React.DragEvent, index: number) => {
+    e.stopPropagation();
+    setDraggedSpecIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', `spec:${index}`);
+    } catch {}
+  };
+
+  const handleDragEnterSpec = (e: React.DragEvent, index: number) => {
+    if (draggedSpecIdx === null || draggedSpecIdx === index) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverSpecIdx(index);
+  };
+
+  const handleDragOverSpec = (e: React.DragEvent) => {
+    if (draggedSpecIdx === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropSpec = (e: React.DragEvent, targetIndex: number) => {
+    if (draggedSpecIdx === null || draggedSpecIdx === targetIndex) {
+      setDraggedSpecIdx(null);
+      setDragOverSpecIdx(null);
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    setCustomSpecs((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(draggedSpecIdx, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+    setDraggedSpecIdx(null);
+    setDragOverSpecIdx(null);
+  };
+
+  const handleDragEndSpec = () => {
+    setDraggedSpecIdx(null);
+    setDragOverSpecIdx(null);
+  };
+
+  // 3. Contribution Phases Reordering
+  const [draggedContribIdx, setDraggedContribIdx] = useState<number | null>(null);
+  const [dragOverContribIdx, setDragOverContribIdx] = useState<number | null>(null);
+
+  const handleDragStartContrib = (e: React.DragEvent, index: number) => {
+    e.stopPropagation();
+    setDraggedContribIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', `contrib:${index}`);
+    } catch {}
+  };
+
+  const handleDragEnterContrib = (e: React.DragEvent, index: number) => {
+    if (draggedContribIdx === null || draggedContribIdx === index) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverContribIdx(index);
+  };
+
+  const handleDragOverContrib = (e: React.DragEvent) => {
+    if (draggedContribIdx === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropContrib = (e: React.DragEvent, targetIndex: number) => {
+    if (draggedContribIdx === null || draggedContribIdx === targetIndex) {
+      setDraggedContribIdx(null);
+      setDragOverContribIdx(null);
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    setContributionPhases((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(draggedContribIdx, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+    setDraggedContribIdx(null);
+    setDragOverContribIdx(null);
+  };
+
+  const handleDragEndContrib = () => {
+    setDraggedContribIdx(null);
+    setDragOverContribIdx(null);
+  };
+
+  // 4. More Editorial Blocks Reordering (BLOCK #1, #2, #3...)
+  const [draggedBlockIdx, setDraggedBlockIdx] = useState<number | null>(null);
+  const [dragOverBlockIdx, setDragOverBlockIdx] = useState<number | null>(null);
+
+  const handleDragStartBlock = (e: React.DragEvent, index: number) => {
+    e.stopPropagation();
+    setDraggedBlockIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', `block:${index}`);
+    } catch {}
+  };
+
+  const handleDragEnterBlock = (e: React.DragEvent, index: number) => {
+    if (draggedBlockIdx === null || draggedBlockIdx === index) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverBlockIdx(index);
+  };
+
+  const handleDragOverBlock = (e: React.DragEvent) => {
+    if (draggedBlockIdx === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropBlock = (e: React.DragEvent, targetIndex: number) => {
+    if (draggedBlockIdx === null || draggedBlockIdx === targetIndex) {
+      setDraggedBlockIdx(null);
+      setDragOverBlockIdx(null);
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    setMoreBlocks((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(draggedBlockIdx, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+    setDraggedBlockIdx(null);
+    setDragOverBlockIdx(null);
+  };
+
+  const handleDragEndBlock = () => {
+    setDraggedBlockIdx(null);
+    setDragOverBlockIdx(null);
+  };
+
+  // 5. More Block Internal Images Reordering (1.1, 1.2, 1.3... within or across blocks)
+  const [draggedBlockImg, setDraggedBlockImg] = useState<{ blockIdx: number; imgIdx: number } | null>(null);
+  const [dragOverBlockImg, setDragOverBlockImg] = useState<{ blockIdx: number; imgIdx: number } | null>(null);
+
+  const handleDragStartBlockImg = (e: React.DragEvent, blockIdx: number, imgIdx: number) => {
+    e.stopPropagation();
+    setDraggedBlockImg({ blockIdx, imgIdx });
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', `blockImg:${blockIdx}:${imgIdx}`);
+    } catch {}
+  };
+
+  const handleDragEnterBlockImg = (e: React.DragEvent, blockIdx: number, imgIdx: number) => {
+    if (!draggedBlockImg) return;
+    if (draggedBlockImg.blockIdx === blockIdx && draggedBlockImg.imgIdx === imgIdx) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverBlockImg({ blockIdx, imgIdx });
+  };
+
+  const handleDragOverBlockImg = (e: React.DragEvent) => {
+    if (!draggedBlockImg) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDropBlockImg = (e: React.DragEvent, targetBlockIdx: number, targetImgIdx: number) => {
+    if (!draggedBlockImg) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const { blockIdx: fromBlockIdx, imgIdx: fromImgIdx } = draggedBlockImg;
+    if (fromBlockIdx === targetBlockIdx && fromImgIdx === targetImgIdx) {
+      setDraggedBlockImg(null);
+      setDragOverBlockImg(null);
+      return;
+    }
+
+    setMoreBlocks((prev) => {
+      const next = prev.map((b) => ({ ...b, images: [...(b.images || [])] }));
+      if (!next[fromBlockIdx] || !next[targetBlockIdx]) return prev;
+      const [movedImg] = next[fromBlockIdx].images.splice(fromImgIdx, 1);
+      if (movedImg !== undefined) {
+        next[targetBlockIdx].images.splice(targetImgIdx, 0, movedImg);
+      }
+      return next;
+    });
+
+    setDraggedBlockImg(null);
+    setDragOverBlockImg(null);
+  };
+
+  const handleDragEndBlockImg = () => {
+    setDraggedBlockImg(null);
+    setDragOverBlockImg(null);
+  };
+
+  // 6. Detail Images Reordering
   const [draggedDetailIdx, setDraggedDetailIdx] = useState<number | null>(null);
   const [dragOverDetailIdx, setDragOverDetailIdx] = useState<number | null>(null);
 
   const handleDragStartDetail = (e: React.DragEvent, index: number) => {
+    e.stopPropagation();
     setDraggedDetailIdx(index);
     e.dataTransfer.effectAllowed = 'move';
     try {
-      e.dataTransfer.setData('text/plain', String(index));
+      e.dataTransfer.setData('text/plain', `detail:${index}`);
     } catch {}
   };
 
   const handleDragEnterDetail = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
     if (draggedDetailIdx === null || draggedDetailIdx === index) return;
+    e.preventDefault();
+    e.stopPropagation();
     setDragOverDetailIdx(index);
   };
 
   const handleDragOverDetail = (e: React.DragEvent) => {
+    if (draggedDetailIdx === null) return;
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
   };
 
   const handleDropDetail = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
     if (draggedDetailIdx === null || draggedDetailIdx === targetIndex) {
       setDraggedDetailIdx(null);
       setDragOverDetailIdx(null);
       return;
     }
+    e.preventDefault();
+    e.stopPropagation();
 
     setDetailImages((prev) => {
       const copy = [...prev];
@@ -1078,8 +1394,10 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     URL.revokeObjectURL(url);
   };
 
-  const handlePublishWork = (e?: React.FormEvent) => {
+  const handlePublishWork = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isPublishing) return;
+    setIsPublishing(true);
 
     // 1. Commit active project into draft arrays
     let finalProjects = [...draftProjects];
@@ -1170,19 +1488,14 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
       setEditingSlug(targetSlug);
     }
 
-    // 2. Save all projects and experiences in storage & cache
-    for (const p of finalProjects) {
-      saveCustomProject(p, p.slug);
-    }
-    for (const exp of finalExperiences) {
-      saveExperienceProject(exp);
-    }
+    // 2. Save About & Resume to localStorage
+    try {
+      localStorage.setItem('leehyejun_custom_about', JSON.stringify(aboutForm));
+      localStorage.setItem('leehyejun_custom_resume', JSON.stringify(resumeForm));
+    } catch {}
 
-    // 3. Also save About & Resume
-    saveAboutData(aboutForm);
-    saveResumeData(resumeForm);
-
-    saveAllProjectsBatch(finalProjects, finalExperiences);
+    // 3. Save all projects and experiences in memory, IndexedDB, and localStorage atomically (skip duplicate syncToServer)
+    saveAllProjectsBatch(finalProjects, finalExperiences, true);
 
     setDraftProjects(finalProjects);
     setDraftExperiences(finalExperiences);
@@ -1195,27 +1508,26 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
       onProjectAdded(publishedProject);
     }
 
+    // 4. Single atomic sync to Cloud Firestore (with chunked image offloading) AND local server disk
+    try {
+      await syncToServer({
+        projects: finalProjects,
+        experiences: finalExperiences,
+        about: aboutForm,
+        resume: resumeForm,
+      });
+    } catch (err) {
+      console.error('[Publish] Sync error:', err);
+    } finally {
+      setIsPublishing(false);
+    }
+
     setIsSaved(true);
-
-    // Sync to local server file & Firestore immediately
-    syncToServer({
-      projects: finalProjects,
-      experiences: finalExperiences,
-      about: aboutForm,
-      resume: resumeForm,
-    });
-
-    savePortfolioToFirestore({
-      projects: finalProjects,
-      experiences: finalExperiences,
-      about: aboutForm,
-      resume: resumeForm,
-    }).catch((err) => console.error('[Firestore] Save error:', err));
 
     setTimeout(() => {
       setIsSaved(false);
       onClose();
-    }, 900);
+    }, 600);
   };
 
   // About Form Save Handler
@@ -1710,10 +2022,15 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
             /* ============================================================== */
             <div className="space-y-4">
               <div className="flex justify-between items-center pb-2 border-b border-[rgba(0,0,0,0.15)]">
-                <span className="font-normal text-black">등록된 프로젝트 목록</span>
+                <div>
+                  <span className="font-normal text-black">등록된 프로젝트 목록</span>
+                  <span className="ml-2 text-[11px] text-[rgba(0,0,0,0.5)]">
+                    (드래그하여 프로젝트 1~{draftProjects.length}번 순서를 바꿀 수 있습니다)
+                  </span>
+                </div>
                 <button
                   onClick={handleNewProject}
-                  className="text-[12px] bg-black text-white px-2.5 py-1 flex items-center gap-1 hover:bg-neutral-800"
+                  className="text-[12px] bg-black text-white px-2.5 py-1 flex items-center gap-1 hover:bg-neutral-800 cursor-pointer"
                 >
                   <Plus size={12} />
                   <span>+ 새 프로젝트 추가</span>
@@ -1721,49 +2038,76 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               </div>
 
               <div className="divide-y divide-[rgba(0,0,0,0.1)]">
-                {(projectsList || []).filter((p): p is WorkProject => Boolean(p && p.slug)).map((p) => (
-                  <div key={p.slug} className="py-2.5 flex items-center justify-between gap-3 text-[13px]">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="font-mono text-[11px] text-[rgba(0,0,0,0.4)]">
-                        #{p.order}
-                      </span>
-                      {p.thumbnail ? (
-                        <img
-                          src={p.thumbnail}
-                          alt=""
-                          className="w-8 h-10 object-cover border border-[rgba(0,0,0,0.1)] shrink-0"
-                        />
-                      ) : (
-                        <div className="w-8 h-10 bg-neutral-100 border border-[rgba(0,0,0,0.1)] flex items-center justify-center shrink-0">
-                          <ImageIcon size={12} className="text-neutral-400" />
+                {(draftProjects || [])
+                  .filter((p): p is WorkProject => Boolean(p && p.slug))
+                  .map((p, pIdx) => {
+                    const isDragging = draggedProjectIdx === pIdx;
+                    const isOver = dragOverProjectIdx === pIdx && !isDragging;
+                    return (
+                      <div
+                        key={p.slug}
+                        draggable
+                        onDragStart={(e) => handleDragStartProject(e, pIdx)}
+                        onDragEnter={(e) => handleDragEnterProject(e, pIdx)}
+                        onDragOver={handleDragOverProject}
+                        onDrop={(e) => handleDropProject(e, pIdx)}
+                        onDragEnd={handleDragEndProject}
+                        className={`py-2.5 px-2 flex items-center justify-between gap-3 text-[13px] transition-all cursor-grab active:cursor-grabbing ${
+                          isDragging
+                            ? 'opacity-35 bg-neutral-100 border border-dashed border-black'
+                            : isOver
+                            ? 'ring-2 ring-black bg-neutral-50'
+                            : 'hover:bg-neutral-50/70'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <GripVertical
+                            size={14}
+                            className="text-neutral-400 shrink-0"
+                          />
+                          <span className="font-mono text-[11px] text-[rgba(0,0,0,0.45)] w-6 shrink-0">
+                            #{p.order}
+                          </span>
+                          {p.thumbnail ? (
+                            <img
+                              src={p.thumbnail}
+                              alt=""
+                              className="w-8 h-10 object-cover border border-[rgba(0,0,0,0.1)] shrink-0 pointer-events-none"
+                            />
+                          ) : (
+                            <div className="w-8 h-10 bg-neutral-100 border border-[rgba(0,0,0,0.1)] flex items-center justify-center shrink-0">
+                              <ImageIcon size={12} className="text-neutral-400" />
+                            </div>
+                          )}
+                          <div className="truncate">
+                            <div className="font-normal text-black truncate">{p.title}</div>
+                            <div className="text-[11px] text-[rgba(0,0,0,0.45)]">
+                              {p.materials} · {p.date}
+                            </div>
+                          </div>
                         </div>
-                      )}
-                      <div className="truncate">
-                        <div className="font-normal text-black truncate">{p.title}</div>
-                        <div className="text-[11px] text-[rgba(0,0,0,0.45)]">
-                          {p.materials} · {p.date}
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectProjectToEdit(p)}
+                            className="text-[12px] border border-[rgba(0,0,0,0.2)] bg-white px-2 py-1 flex items-center gap-1 hover:bg-neutral-50 cursor-pointer"
+                          >
+                            <Edit3 size={11} />
+                            <span>수정</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProject(p.slug)}
+                            className="text-[12px] text-red-600 border border-red-200 bg-white px-2 py-1 flex items-center gap-1 hover:bg-red-50 cursor-pointer"
+                          >
+                            <Trash2 size={11} />
+                            <span>삭제</span>
+                          </button>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handleSelectProjectToEdit(p)}
-                        className="text-[12px] border border-[rgba(0,0,0,0.2)] px-2 py-1 flex items-center gap-1 hover:bg-neutral-50"
-                      >
-                        <Edit3 size={11} />
-                        <span>수정</span>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProject(p.slug)}
-                        className="text-[12px] text-red-600 border border-red-200 px-2 py-1 flex items-center gap-1 hover:bg-red-50"
-                      >
-                        <Trash2 size={11} />
-                        <span>삭제</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
               </div>
 
               {/* 경험 아카이브 프로젝트 (Resume 상세 전용) */}
@@ -1808,29 +2152,50 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
             <form onSubmit={handlePublishWork} className="space-y-4">
               {/* Quick Project Slot Selector Bar */}
               <div className="space-y-2 pb-2.5 border-b border-[rgba(0,0,0,0.1)]">
-                <div className="flex items-center justify-between text-[11px] text-[rgba(0,0,0,0.5)]">
-                  <span>수정할 프로젝트 선택:</span>
-                  <span className="text-[11px] text-neutral-500 font-mono">Work 및 Resume 경험 프로젝트를 선택하여 사진과 내용을 관리할 수 있습니다</span>
+                <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-[rgba(0,0,0,0.5)]">
+                  <span>수정할 프로젝트 선택 (마우스로 드래그하여 프로젝트 순서를 바꿀 수 있습니다):</span>
+                  <span className="text-[11px] text-neutral-500 font-mono">드래그 정렬 지원</span>
                 </div>
                 
-                {/* 1. Work Projects Row */}
+                {/* 1. Work Projects Row (Draggable to reorder 1..9) */}
                 <div className="space-y-1">
-                  <div className="text-[10.5px] font-bold text-neutral-600 uppercase tracking-wider">Work 프로젝트</div>
+                  <div className="text-[10.5px] font-bold text-neutral-600 uppercase tracking-wider">
+                    Work 프로젝트 (드래그하여 #1~#{draftProjects.length} 순서 이동)
+                  </div>
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                    {draftProjects.map((p) => {
+                    {draftProjects.map((p, pIdx) => {
                       const isSelected = editingSlug === p.slug;
                       const isModified = modifiedSlugs.has(p.slug);
+                      const isDragging = draggedProjectIdx === pIdx;
+                      const isOver = dragOverProjectIdx === pIdx && !isDragging;
                       return (
                         <button
                           key={p.slug}
                           type="button"
+                          draggable
+                          onDragStart={(e) => handleDragStartProject(e, pIdx)}
+                          onDragEnter={(e) => handleDragEnterProject(e, pIdx)}
+                          onDragOver={handleDragOverProject}
+                          onDrop={(e) => handleDropProject(e, pIdx)}
+                          onDragEnd={handleDragEndProject}
                           onClick={() => handleSelectProjectToEdit(p)}
-                          className={`px-3 py-1.5 text-[12px] border transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                          title="클릭하여 수정 / 드래그하여 프로젝트 순서 변경"
+                          className={`px-2.5 py-1.5 text-[12px] border transition-all cursor-grab active:cursor-grabbing shrink-0 flex items-center gap-1 ${
+                            isDragging
+                              ? 'opacity-35 scale-95 border-dashed border-black'
+                              : isOver
+                              ? 'ring-2 ring-black scale-[1.03] z-10'
+                              : ''
+                          } ${
                             isSelected
                               ? 'bg-black text-white border-black font-medium'
                               : 'bg-white text-black border-[rgba(0,0,0,0.2)] hover:border-black'
                           }`}
                         >
+                          <GripVertical
+                            size={11}
+                            className={isSelected ? 'text-neutral-400' : 'text-neutral-400'}
+                          />
                           <span className={`font-mono ${isSelected ? 'text-neutral-300' : 'text-[rgba(0,0,0,0.45)]'}`}>
                             #{p.order}
                           </span>
@@ -1955,7 +2320,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               </div>
 
               {/* ============================================================== */}
-              {/* 0. More 탭 상단 스펙 항목 관리 (Brand / Materials / Dimensions / Process Scope — 추가·삭제·빈칸 가능) */}
+              {/* 0. More 탭 상단 스펙 항목 관리 (드래그 정렬 + 추가·삭제·빈칸 가능) */}
               {/* ============================================================== */}
               <div className="p-3.5 border border-[rgba(0,0,0,0.18)] bg-[#FAFAFA] space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1964,7 +2329,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                       📋 <strong>More 탭 상단 스펙 항목 관리</strong> (Brand / Materials / Dimensions / Process Scope 등)
                     </div>
                     <div className="text-[11px] text-[rgba(0,0,0,0.5)] mt-0.5">
-                      내용을 비워두면 빈칸으로 유지되며, 우측 휴지통 버튼으로 필요 없는 항목 줄 자체를 삭제하거나 새 항목을 추가할 수 있습니다.
+                      좌측 손잡이(⋮⋮)를 드래그하여 순서를 바꿀 수 있으며, 내용을 비워두면 빈칸 유지·휴지통 버튼으로 줄 삭제가 가능합니다.
                     </div>
                   </div>
                   <button
@@ -1980,102 +2345,126 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 </div>
 
                 <div className="space-y-2 pt-1">
-                  {customSpecs.map((spec, sIdx) => (
-                    <div
-                      key={sIdx}
-                      className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-2 border border-[rgba(0,0,0,0.12)]"
-                    >
-                      {/* 좌측: 항목명 (Label) */}
-                      <div className="sm:col-span-3">
-                        <label className="block sm:hidden text-[10px] text-[rgba(0,0,0,0.45)] font-mono uppercase mb-0.5">
-                          항목명 (Label)
-                        </label>
-                        <input
-                          type="text"
-                          value={spec.label}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setCustomSpecs((prev) => {
-                              const next = [...prev];
-                              next[sIdx] = { ...next[sIdx], label: val };
-                              return next;
-                            });
-                          }}
-                          placeholder="항목명 (예: Brand)"
-                          className="w-full border border-[rgba(0,0,0,0.2)] px-2.5 py-1 text-[12px] font-mono uppercase focus:outline-none focus:border-black"
-                        />
-                      </div>
+                  {customSpecs.map((spec, sIdx) => {
+                    const isDragging = draggedSpecIdx === sIdx;
+                    const isOver = dragOverSpecIdx === sIdx && !isDragging;
+                    return (
+                      <div
+                        key={sIdx}
+                        draggable
+                        onDragStart={(e) => handleDragStartSpec(e, sIdx)}
+                        onDragEnter={(e) => handleDragEnterSpec(e, sIdx)}
+                        onDragOver={handleDragOverSpec}
+                        onDrop={(e) => handleDropSpec(e, sIdx)}
+                        onDragEnd={handleDragEndSpec}
+                        className={`grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-2 border transition-all ${
+                          isDragging
+                            ? 'opacity-35 scale-[0.99] border-dashed border-black'
+                            : isOver
+                            ? 'ring-2 ring-black border-black z-10'
+                            : 'border-[rgba(0,0,0,0.12)] hover:border-[rgba(0,0,0,0.3)]'
+                        }`}
+                      >
+                        {/* 좌측: 드래그 핸들 + 항목명 (Label) */}
+                        <div className="sm:col-span-3 flex items-center gap-1.5">
+                          <div
+                            className="text-neutral-400 hover:text-black cursor-grab active:cursor-grabbing shrink-0 p-0.5"
+                            title="드래그하여 스펙 항목 순서 이동"
+                          >
+                            <GripVertical size={14} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <label className="block sm:hidden text-[10px] text-[rgba(0,0,0,0.45)] font-mono uppercase mb-0.5">
+                              항목명 (Label)
+                            </label>
+                            <input
+                              type="text"
+                              value={spec.label}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCustomSpecs((prev) => {
+                                  const next = [...prev];
+                                  next[sIdx] = { ...next[sIdx], label: val };
+                                  return next;
+                                });
+                              }}
+                              placeholder="항목명 (예: Brand)"
+                              className="w-full border border-[rgba(0,0,0,0.2)] px-2.5 py-1 text-[12px] font-mono uppercase focus:outline-none focus:border-black"
+                            />
+                          </div>
+                        </div>
 
-                      {/* 가운데: 내용 (Value) */}
-                      <div className="sm:col-span-7">
-                        <label className="block sm:hidden text-[10px] text-[rgba(0,0,0,0.45)] font-mono uppercase mb-0.5">
-                          내용 (Value — 비워두면 빈칸으로 표시)
-                        </label>
-                        <input
-                          type="text"
-                          value={spec.value}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setCustomSpecs((prev) => {
-                              const next = [...prev];
-                              next[sIdx] = { ...next[sIdx], value: val };
-                              return next;
-                            });
-                          }}
-                          placeholder={`${spec.label} 내용 입력 (비워두면 빈칸으로 표시됩니다)`}
-                          className="w-full border border-[rgba(0,0,0,0.2)] px-2.5 py-1 text-[12.5px] focus:outline-none focus:border-black"
-                        />
-                      </div>
+                        {/* 가운데: 내용 (Value) */}
+                        <div className="sm:col-span-7">
+                          <label className="block sm:hidden text-[10px] text-[rgba(0,0,0,0.45)] font-mono uppercase mb-0.5">
+                            내용 (Value — 비워두면 빈칸으로 표시)
+                          </label>
+                          <input
+                            type="text"
+                            value={spec.value}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setCustomSpecs((prev) => {
+                                const next = [...prev];
+                                next[sIdx] = { ...next[sIdx], value: val };
+                                return next;
+                              });
+                            }}
+                            placeholder={`${spec.label} 내용 입력 (비워두면 빈칸으로 표시됩니다)`}
+                            className="w-full border border-[rgba(0,0,0,0.2)] px-2.5 py-1 text-[12.5px] focus:outline-none focus:border-black"
+                          />
+                        </div>
 
-                      {/* 우측: 위/아래 이동 + 항목 삭제 */}
-                      <div className="sm:col-span-2 flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          disabled={sIdx === 0}
-                          onClick={() => {
-                            if (sIdx === 0) return;
-                            setCustomSpecs((prev) => {
-                              const next = [...prev];
-                              const [moved] = next.splice(sIdx, 1);
-                              next.splice(sIdx - 1, 0, moved);
-                              return next;
-                            });
-                          }}
-                          className="px-1.5 py-1 text-[11px] border border-[rgba(0,0,0,0.15)] hover:border-black disabled:opacity-30 cursor-pointer"
-                          title="위로 이동"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          disabled={sIdx === customSpecs.length - 1}
-                          onClick={() => {
-                            if (sIdx === customSpecs.length - 1) return;
-                            setCustomSpecs((prev) => {
-                              const next = [...prev];
-                              const [moved] = next.splice(sIdx, 1);
-                              next.splice(sIdx + 1, 0, moved);
-                              return next;
-                            });
-                          }}
-                          className="px-1.5 py-1 text-[11px] border border-[rgba(0,0,0,0.15)] hover:border-black disabled:opacity-30 cursor-pointer"
-                          title="아래로 이동"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCustomSpecs((prev) => prev.filter((_, idx) => idx !== sIdx))
-                          }
-                          className="p-1.5 text-neutral-400 hover:text-red-600 border border-transparent hover:border-red-200 cursor-pointer"
-                          title="이 스펙 항목 줄 삭제"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {/* 우측: 위/아래 이동 + 항목 삭제 */}
+                        <div className="sm:col-span-2 flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            disabled={sIdx === 0}
+                            onClick={() => {
+                              if (sIdx === 0) return;
+                              setCustomSpecs((prev) => {
+                                const next = [...prev];
+                                const [moved] = next.splice(sIdx, 1);
+                                next.splice(sIdx - 1, 0, moved);
+                                return next;
+                              });
+                            }}
+                            className="px-1.5 py-1 text-[11px] border border-[rgba(0,0,0,0.15)] hover:border-black disabled:opacity-30 cursor-pointer"
+                            title="위로 이동"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            disabled={sIdx === customSpecs.length - 1}
+                            onClick={() => {
+                              if (sIdx === customSpecs.length - 1) return;
+                              setCustomSpecs((prev) => {
+                                const next = [...prev];
+                                const [moved] = next.splice(sIdx, 1);
+                                next.splice(sIdx + 1, 0, moved);
+                                return next;
+                              });
+                            }}
+                            className="px-1.5 py-1 text-[11px] border border-[rgba(0,0,0,0.15)] hover:border-black disabled:opacity-30 cursor-pointer"
+                            title="아래로 이동"
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCustomSpecs((prev) => prev.filter((_, idx) => idx !== sIdx))
+                            }
+                            className="p-1.5 text-neutral-400 hover:text-red-600 border border-transparent hover:border-red-200 cursor-pointer"
+                            title="이 스펙 항목 줄 삭제"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* 삭제된 기본 항목 빠른 복원 버튼 */}
@@ -2118,12 +2507,39 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               </div>
 
               {/* ============================================================== */}
-              {/* 1. Photo 탭 대표 촬영컷 (thumbnail)                            */}
+              {/* 1. Photo 탭 대표 촬영컷 (thumbnail — 드롭존 지원 + 개별 자르기 옵션) */}
               {/* ============================================================== */}
-              <div className="p-3.5 border border-[rgba(0,0,0,0.15)] bg-[#FAFAFA] space-y-2.5">
+              <div
+                onDragEnter={(e) => {
+                  if (hasDraggedFiles(e)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsFileDragOverThumb(true);
+                  }
+                }}
+                onDragOver={(e) => {
+                  if (hasDraggedFiles(e)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.dataTransfer.dropEffect = 'copy';
+                    if (!isFileDragOverThumb) setIsFileDragOverThumb(true);
+                  }
+                }}
+                onDragLeave={(e) => {
+                  if (hasDraggedFiles(e) && !e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setIsFileDragOverThumb(false);
+                  }
+                }}
+                onDrop={handleThumbnailFileDrop}
+                className={`p-3.5 border transition-colors space-y-2.5 ${
+                  isFileDragOverThumb
+                    ? 'border-2 border-dashed border-black bg-neutral-100'
+                    : 'border-[rgba(0,0,0,0.15)] bg-[#FAFAFA]'
+                }`}
+              >
                 <div className="flex justify-between items-center">
                   <span className="font-normal text-black text-[12.5px]">
-                    🖼️ <strong>Photo 대표 촬영컷</strong> (가운데 Photo 탭 최상단 및 목록 대표 사진)
+                    🖼️ <strong>Photo 대표 촬영컷</strong> (파일을 끌어다 놓거나 선택하면 즉시 첨부됩니다)
                   </span>
                   {thumbnail && (
                     <div className="flex items-center gap-2">
@@ -2178,14 +2594,20 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                       </button>
                     </div>
                   ) : (
-                    <div className="w-24 h-32 border border-dashed border-[rgba(0,0,0,0.25)] flex flex-col items-center justify-center text-center p-2 text-[10px] text-[rgba(0,0,0,0.4)] shrink-0 bg-white">
+                    <div
+                      onClick={() => thumbnailFileInputRef.current?.click()}
+                      className="w-24 h-32 border border-dashed border-[rgba(0,0,0,0.3)] hover:border-black flex flex-col items-center justify-center text-center p-2 text-[10px] text-[rgba(0,0,0,0.5)] shrink-0 bg-white cursor-pointer transition-colors"
+                    >
                       <ImageIcon size={20} />
-                      <span className="mt-1">사진 등록</span>
+                      <span className="mt-1">클릭 또는 파일 드롭</span>
                     </div>
                   )}
 
                   <div className="flex-1 space-y-2 w-full">
-                    <div className="flex items-center gap-2">
+                    <div
+                      onClick={() => thumbnailFileInputRef.current?.click()}
+                      className="border border-dashed border-[rgba(0,0,0,0.25)] hover:border-black bg-white p-2.5 flex flex-wrap items-center justify-between gap-2 cursor-pointer transition-colors"
+                    >
                       <input
                         type="file"
                         accept="image/*"
@@ -2193,15 +2615,13 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                         onChange={handleThumbnailUpload}
                         className="hidden"
                       />
-                      <button
-                        type="button"
-                        onClick={() => thumbnailFileInputRef.current?.click()}
-                        disabled={isCompressing}
-                        className="text-[12px] border border-black bg-white px-3 py-1.5 flex items-center gap-1.5 hover:bg-neutral-100 cursor-pointer disabled:opacity-50"
-                      >
+                      <span className="text-[11.5px] text-neutral-700 flex items-center gap-1.5">
                         {isCompressing ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                        <span>컴퓨터에서 사진 선택 (자동 최적화)</span>
-                      </button>
+                        <span>
+                          <strong>여기에 사진 파일을 끌어다 놓거나</strong> 클릭하여 선택 (즉시 첨부)
+                        </span>
+                      </span>
+                      <span className="text-[10.5px] text-neutral-400 font-mono">DRAG & DROP</span>
                     </div>
 
                     <div className="text-[11px] text-[rgba(0,0,0,0.4)]">또는 이미지 웹 URL 직접 입력:</div>
@@ -2217,9 +2637,36 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               </div>
 
               {/* ============================================================== */}
-              {/* 2. Photo 탭 최종 촬영 이미지 목록 (가운데 Photo 컬럼에 노출)    */}
+              {/* 2. Photo 탭 최종 촬영 이미지 목록 (파일 드롭존 + 드래그 정렬)    */}
               {/* ============================================================== */}
-              <div className="p-3.5 border border-[rgba(0,0,0,0.15)] bg-[#FAFAFA] space-y-2.5">
+              <div
+                onDragEnter={(e) => {
+                  if (hasDraggedFiles(e)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsFileDragOverDetail(true);
+                  }
+                }}
+                onDragOver={(e) => {
+                  if (hasDraggedFiles(e)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.dataTransfer.dropEffect = 'copy';
+                    if (!isFileDragOverDetail) setIsFileDragOverDetail(true);
+                  }
+                }}
+                onDragLeave={(e) => {
+                  if (hasDraggedFiles(e) && !e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setIsFileDragOverDetail(false);
+                  }
+                }}
+                onDrop={handleDetailFileDrop}
+                className={`p-3.5 border transition-colors space-y-2.5 ${
+                  isFileDragOverDetail
+                    ? 'border-2 border-dashed border-black bg-neutral-100'
+                    : 'border-[rgba(0,0,0,0.15)] bg-[#FAFAFA]'
+                }`}
+              >
                 <div className="flex justify-between items-center">
                   <span className="font-normal text-black text-[12.5px]">
                     📸 <strong>Photo 탭 — 제품 최종 촬영 이미지 목록</strong> (가운데 Photo 탭에 나열될 스튜디오/공간 촬영컷)
@@ -2229,7 +2676,8 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                {/* File Dropzone Banner + URL Input */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <input
                     type="file"
                     accept="image/*"
@@ -2238,28 +2686,31 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     onChange={handleDetailImageUpload}
                     className="hidden"
                   />
-                  <button
-                    type="button"
+                  <div
                     onClick={() => detailFileInputRef.current?.click()}
-                    disabled={isCompressing}
-                    className="text-[12px] border border-black bg-white px-3 py-1.5 flex items-center gap-1.5 hover:bg-neutral-100 cursor-pointer disabled:opacity-50"
+                    className="flex-1 border border-dashed border-[rgba(0,0,0,0.3)] hover:border-black bg-white px-3 py-2 flex items-center justify-between gap-2 cursor-pointer transition-colors"
                   >
-                    {isCompressing ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                    <span>최종 촬영 이미지 추가 (여러 장 선택 가능)</span>
-                  </button>
+                    <span className="text-[12px] text-black flex items-center gap-1.5">
+                      {isCompressing ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                      <span>
+                        <strong>여러 장의 사진을 여기에 드래그 앤 드롭</strong>하거나 클릭하여 추가 (즉시 첨부)
+                      </span>
+                    </span>
+                    <span className="text-[10.5px] text-neutral-400 font-mono shrink-0">MULTI DROP</span>
+                  </div>
 
-                  <div className="flex items-center gap-1 flex-1 min-w-[200px]">
+                  <div className="flex items-center gap-1 sm:w-64">
                     <input
                       type="text"
                       value={newDetailUrl}
                       onChange={(e) => setNewDetailUrl(e.target.value)}
                       placeholder="이미지 URL 직접 추가"
-                      className="flex-1 border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12px] bg-white focus:outline-none focus:border-black"
+                      className="flex-1 border border-[rgba(0,0,0,0.25)] px-2.5 py-1.5 text-[12px] bg-white focus:outline-none focus:border-black"
                     />
                     <button
                       type="button"
                       onClick={handleAddDetailUrl}
-                      className="text-[12px] border border-[rgba(0,0,0,0.3)] bg-white px-2 py-1 hover:bg-neutral-100"
+                      className="text-[12px] border border-[rgba(0,0,0,0.3)] bg-white px-2.5 py-1.5 hover:bg-neutral-100 cursor-pointer shrink-0"
                     >
                       추가
                     </button>
@@ -2272,7 +2723,9 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     <div className="flex items-center justify-between text-[11px] text-[rgba(0,0,0,0.55)] bg-white px-2 py-1.5 border border-[rgba(0,0,0,0.1)]">
                       <span className="flex items-center gap-1.5">
                         <GripVertical size={13} className="text-neutral-500" />
-                        <span><strong>드래그 & 드롭</strong>으로 촬영컷 순서를 바꿀 수 있습니다.</span>
+                        <span>
+                          사진 카드를 <strong>마우스로 드래그</strong>하여 촬영컷 순서를 바꾸거나, 각 사진의 <strong>[자르기]</strong> 아이콘으로 비율을 조정하세요.
+                        </span>
                       </span>
                       <span className="font-mono text-[10.5px] text-[rgba(0,0,0,0.4)]">총 {detailImages.length}장</span>
                     </div>
@@ -2401,14 +2854,14 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     </div>
                   </div>
                 ) : (
-                  <div className="text-[11.5px] text-[rgba(0,0,0,0.4)] py-1">
-                    등록된 최종 촬영 이미지가 없습니다.
+                  <div className="text-[11.5px] text-[rgba(0,0,0,0.4)] py-2 text-center border border-dashed border-[rgba(0,0,0,0.15)] bg-white">
+                    등록된 최종 촬영 이미지가 없습니다. 위 영역에 사진을 드래그하여 놓아주세요.
                   </div>
                 )}
               </div>
 
               {/* ============================================================== */}
-              {/* 3. More 탭 — CONTRIBUTION (기여도 % 조절 및 항목 설정)          */}
+              {/* 3. More 탭 — CONTRIBUTION (드래그 정렬 + 기여도 % 조절)          */}
               {/* ============================================================== */}
               <div className="p-3.5 border border-[rgba(0,0,0,0.2)] bg-[#FAFAFA] space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[rgba(0,0,0,0.1)]">
@@ -2417,7 +2870,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                       📊 More 탭 — CONTRIBUTION (기여도 % 설정)
                     </span>
                     <div className="text-[11px] text-[rgba(0,0,0,0.5)] mt-0.5">
-                      우측 More 탭 스펙 하단에 표시되는 단계별 기여도 항목명과 퍼센트(0~100%)를 자유롭게 조절할 수 있습니다.
+                      좌측 손잡이(⋮⋮)를 드래그하여 순서를 바꾸거나, 단계별 기여도 항목명과 퍼센트(0~100%)를 조절할 수 있습니다.
                     </div>
                   </div>
                   <button
@@ -2436,55 +2889,64 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 </div>
 
                 <div className="space-y-2.5">
-                  {contributionPhases.map((phase, pIdx) => (
-                    <div
-                      key={pIdx}
-                      className="p-2.5 bg-white border border-[rgba(0,0,0,0.15)] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                    >
-                      {/* 항목명 입력 */}
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 shrink-0" />
-                        <input
-                          type="text"
-                          value={phase.label}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setContributionPhases((prev) => {
-                              const copy = [...prev];
-                              copy[pIdx] = { ...copy[pIdx], label: val };
-                              return copy;
-                            });
-                          }}
-                          placeholder="예: 기획 / 조형 디자인"
-                          className="w-full border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px] focus:outline-none focus:border-black"
-                        />
-                      </div>
-
-                      {/* 슬라이더 + 숫자 직접 입력 + 실시간 게이지 미리보기 */}
-                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0">
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          step={5}
-                          value={phase.percent}
-                          onChange={(e) => {
-                            const num = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-                            setContributionPhases((prev) => {
-                              const copy = [...prev];
-                              copy[pIdx] = { ...copy[pIdx], percent: num };
-                              return copy;
-                            });
-                          }}
-                          className="w-24 sm:w-28 accent-black cursor-pointer"
-                          title="드래그하여 기여도 % 조절"
-                        />
-
-                        <div className="flex items-center gap-1">
+                  {contributionPhases.map((phase, pIdx) => {
+                    const isDragging = draggedContribIdx === pIdx;
+                    const isOver = dragOverContribIdx === pIdx && !isDragging;
+                    return (
+                      <div
+                        key={pIdx}
+                        draggable
+                        onDragStart={(e) => handleDragStartContrib(e, pIdx)}
+                        onDragEnter={(e) => handleDragEnterContrib(e, pIdx)}
+                        onDragOver={handleDragOverContrib}
+                        onDrop={(e) => handleDropContrib(e, pIdx)}
+                        onDragEnd={handleDragEndContrib}
+                        className={`p-2.5 bg-white border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all ${
+                          isDragging
+                            ? 'opacity-35 scale-[0.99] border-dashed border-black'
+                            : isOver
+                            ? 'ring-2 ring-black border-black z-10'
+                            : 'border-[rgba(0,0,0,0.15)]'
+                        }`}
+                      >
+                        {/* 드래그 핸들 + 항목명 입력 */}
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div
+                            className="text-neutral-400 hover:text-black cursor-grab active:cursor-grabbing shrink-0 p-0.5"
+                            title="드래그하여 기여도 항목 순서 이동"
+                          >
+                            <GripVertical size={14} />
+                          </div>
                           <input
-                            type="number"
+                            type="text"
+                            value={phase.label}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setContributionPhases((prev) => {
+                                const copy = [...prev];
+                                copy[pIdx] = { ...copy[pIdx], label: val };
+                                return copy;
+                              });
+                            }}
+                            placeholder="예: 기획 / 조형 디자인"
+                            className="w-full border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12.5px] focus:outline-none focus:border-black"
+                          />
+                        </div>
+
+                        {/* 슬라이더 + 숫자 직접 입력 + 실시간 게이지 미리보기 */}
+                        <div
+                          draggable
+                          onDragStart={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          className="flex items-center justify-between sm:justify-end gap-2 shrink-0"
+                        >
+                          <input
+                            type="range"
                             min={0}
                             max={100}
+                            step={5}
                             value={phase.percent}
                             onChange={(e) => {
                               const num = Math.max(0, Math.min(100, Number(e.target.value) || 0));
@@ -2494,28 +2956,47 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                                 return copy;
                               });
                             }}
-                            className="w-14 border border-[rgba(0,0,0,0.25)] px-1.5 py-1 text-[12.5px] font-mono text-right focus:outline-none focus:border-black"
+                            className="w-24 sm:w-28 accent-black cursor-pointer"
+                            title="슬라이더로 기여도 % 조절"
                           />
-                          <span className="text-[12px] font-mono text-black">%</span>
-                        </div>
 
-                        <div className="hidden md:block pl-1">
-                          <ContributionLineGauge percent={phase.percent} />
-                        </div>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={phase.percent}
+                              onChange={(e) => {
+                                const num = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                setContributionPhases((prev) => {
+                                  const copy = [...prev];
+                                  copy[pIdx] = { ...copy[pIdx], percent: num };
+                                  return copy;
+                                });
+                              }}
+                              className="w-14 border border-[rgba(0,0,0,0.25)] px-1.5 py-1 text-[12.5px] font-mono text-right focus:outline-none focus:border-black"
+                            />
+                            <span className="text-[12px] font-mono text-black">%</span>
+                          </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setContributionPhases((prev) => prev.filter((_, i) => i !== pIdx))
-                          }
-                          className="text-red-600 hover:bg-red-50 p-1 cursor-pointer transition-colors"
-                          title="이 기여도 항목 삭제"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                          <div className="hidden md:block pl-1">
+                            <ContributionLineGauge percent={phase.percent} />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setContributionPhases((prev) => prev.filter((_, i) => i !== pIdx))
+                            }
+                            className="text-red-600 hover:bg-red-50 p-1 cursor-pointer transition-colors"
+                            title="이 기여도 항목 삭제"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {contributionPhases.length === 0 && (
                     <div className="text-[11.5px] text-[rgba(0,0,0,0.45)] py-1">
@@ -2526,16 +3007,16 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               </div>
 
               {/* ============================================================== */}
-              {/* 4. More 탭 — 디벨롭 과정 블록 (대표/서브 이미지 + 우측 설명내용) */}
+              {/* 4. More 탭 — 디벨롭 과정 블록 (드롭존 + 블록/이미지 드래그 정렬) */}
               {/* ============================================================== */}
               <div className="p-3.5 border border-black/30 bg-[#F7F7F5] space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[rgba(0,0,0,0.12)]">
                   <div>
                     <span className="font-medium text-black text-[13px]">
-                      🛠️ More 탭 — 디벨롭 과정 블록 편집 (상단 대표/좌측 서브 이미지 + 우측 설명내용)
+                      🛠️ More 탭 — 디벨롭 과정 블록 편집 (파일 드롭 업로드 & 마우스 드래그 순서 변경)
                     </span>
                     <div className="text-[11px] text-[rgba(0,0,0,0.55)] mt-0.5">
-                      각 블록의 1번 이미지(예: 1.1)가 상단 대표이미지로 먼저 보이며, 좌측 서브 썸네일(1.1, 1.2, 1.3...) 클릭 시 상단 이미지가 전환됩니다.
+                      각 블록에 사진을 끌어다 놓으면 즉시 첨부되며, 블록 상단 헤더나 썸네일 사진을 드래그하여 순서를 자유롭게 바꿀 수 있습니다.
                     </div>
                   </div>
 
@@ -2574,25 +3055,113 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                     const blockNum = bIdx + 1;
                     const blockImages = Array.isArray(block.images) ? block.images : [];
                     const urlInputVal = newBlockImageUrls[bIdx] || '';
+                    const isBlockDragging = draggedBlockIdx === bIdx;
+                    const isBlockOver = dragOverBlockIdx === bIdx && !isBlockDragging;
+                    const isFileOverThisBlock = fileDragOverBlockIdx === bIdx;
 
                     return (
                       <div
                         key={block.id || bIdx}
-                        className="p-3.5 bg-white border border-[rgba(0,0,0,0.18)] space-y-3"
+                        onDragEnter={(e) => {
+                          if (hasDraggedFiles(e)) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setFileDragOverBlockIdx(bIdx);
+                          } else if (draggedBlockIdx !== null) {
+                            handleDragEnterBlock(e, bIdx);
+                          }
+                        }}
+                        onDragOver={(e) => {
+                          if (hasDraggedFiles(e)) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.dataTransfer.dropEffect = 'copy';
+                            if (fileDragOverBlockIdx !== bIdx) setFileDragOverBlockIdx(bIdx);
+                          } else if (draggedBlockIdx !== null) {
+                            handleDragOverBlock(e);
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          if (hasDraggedFiles(e) && !e.currentTarget.contains(e.relatedTarget as Node)) {
+                            setFileDragOverBlockIdx((prev) => (prev === bIdx ? null : prev));
+                          }
+                        }}
+                        onDrop={(e) => {
+                          if (hasDraggedFiles(e)) {
+                            handleBlockFileDrop(e, bIdx);
+                          } else if (draggedBlockIdx !== null) {
+                            handleDropBlock(e, bIdx);
+                          }
+                        }}
+                        className={`p-3.5 bg-white border transition-all space-y-3 ${
+                          isFileOverThisBlock
+                            ? 'border-2 border-dashed border-black bg-neutral-100 shadow-md'
+                            : isBlockDragging
+                            ? 'opacity-35 scale-[0.99] border-2 border-dashed border-black'
+                            : isBlockOver
+                            ? 'ring-2 ring-black border-black shadow-md'
+                            : 'border-[rgba(0,0,0,0.18)]'
+                        }`}
                       >
-                        {/* Block Header */}
-                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-[rgba(0,0,0,0.08)]">
-                          <span className="text-[12.5px] font-bold text-black font-mono">
-                            BLOCK #{blockNum} ({blockNum}.1, {blockNum}.2, {blockNum}.3...)
-                          </span>
-                          <div className="flex items-center gap-2">
+                        {/* Block Header (Draggable to reorder entire block) */}
+                        <div
+                          draggable
+                          onDragStart={(e) => handleDragStartBlock(e, bIdx)}
+                          onDragEnd={handleDragEndBlock}
+                          className="flex items-center justify-between gap-2 pb-2 border-b border-[rgba(0,0,0,0.08)] cursor-grab active:cursor-grabbing select-none"
+                          title="이 헤더를 잡고 위/아래로 드래그하여 블록 전체 순서를 바꿀 수 있습니다"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <GripVertical size={14} className="text-neutral-400" />
+                            <span className="text-[12.5px] font-bold text-black font-mono">
+                              BLOCK #{blockNum}
+                            </span>
+                            <span className="text-[11px] text-[rgba(0,0,0,0.45)]">
+                              (드래그하여 블록 순서 이동)
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={bIdx === 0}
+                              onClick={() => {
+                                if (bIdx === 0) return;
+                                setMoreBlocks((prev) => {
+                                  const next = [...prev];
+                                  const [moved] = next.splice(bIdx, 1);
+                                  next.splice(bIdx - 1, 0, moved);
+                                  return next;
+                                });
+                              }}
+                              className="px-1.5 py-0.5 text-[11px] border border-[rgba(0,0,0,0.15)] hover:border-black disabled:opacity-30 cursor-pointer"
+                              title="블록 위로 이동"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              disabled={bIdx === moreBlocks.length - 1}
+                              onClick={() => {
+                                if (bIdx === moreBlocks.length - 1) return;
+                                setMoreBlocks((prev) => {
+                                  const next = [...prev];
+                                  const [moved] = next.splice(bIdx, 1);
+                                  next.splice(bIdx + 1, 0, moved);
+                                  return next;
+                                });
+                              }}
+                              className="px-1.5 py-0.5 text-[11px] border border-[rgba(0,0,0,0.15)] hover:border-black disabled:opacity-30 cursor-pointer"
+                              title="블록 아래로 이동"
+                            >
+                              ↓
+                            </button>
                             {moreBlocks.length > 1 && (
                               <button
                                 type="button"
                                 onClick={() =>
                                   setMoreBlocks((prev) => prev.filter((_, i) => i !== bIdx))
                                 }
-                                className="text-[11px] text-red-600 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                className="text-[11px] text-red-600 hover:underline flex items-center gap-0.5 cursor-pointer ml-1"
                               >
                                 <Trash2 size={11} />
                                 <span>블록 삭제</span>
@@ -2601,36 +3170,41 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                           </div>
                         </div>
 
-                        {/* 1. 블록 이미지 관리 (1.1 대표이미지, 1.2 서브이미지...) */}
+                        {/* 1. 블록 이미지 관리 (파일 드롭존 + 썸네일 드래그 정렬 + 개별 자르기) */}
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-[11.5px] font-medium text-black">
-                              📷 블록 #{blockNum} 이미지 ({blockNum}.1 = 대표이미지, {blockNum}.2~ = 서브 썸네일)
+                              📷 블록 #{blockNum} 이미지 (첫 번째 사진 = 상단 큰 대표이미지, 나머지 = 좌측 서브 썸네일)
                             </span>
                             <span className="text-[11px] font-mono text-[rgba(0,0,0,0.45)]">
                               총 {blockImages.length}장
                             </span>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <div
                               onClick={() => {
                                 setActiveBlockUploadIdx(bIdx);
                                 setTimeout(() => blockFileInputRef.current?.click(), 0);
                               }}
-                              disabled={isCompressing}
-                              className="text-[11.5px] border border-black bg-black text-white px-2.5 py-1 flex items-center gap-1.5 hover:bg-neutral-800 cursor-pointer disabled:opacity-50"
+                              className="flex-1 border border-dashed border-[rgba(0,0,0,0.3)] hover:border-black bg-[#FAFAFA] hover:bg-neutral-100 px-3 py-1.5 flex items-center justify-between gap-2 cursor-pointer transition-colors"
                             >
-                              {isCompressing ? (
-                                <Loader2 size={11} className="animate-spin" />
-                              ) : (
-                                <Upload size={11} />
-                              )}
-                              <span>+ 사진 추가 (여러 장 가능)</span>
-                            </button>
+                              <span className="text-[11.5px] text-black flex items-center gap-1.5">
+                                {isCompressing ? (
+                                  <Loader2 size={11} className="animate-spin" />
+                                ) : (
+                                  <Upload size={11} />
+                                )}
+                                <span>
+                                  <strong>여기에 사진 파일을 드래그 앤 드롭</strong>하거나 클릭하여 추가 (여러 장 즉시 첨부)
+                                </span>
+                              </span>
+                              <span className="text-[10px] font-mono text-neutral-400 shrink-0">
+                                DROP FILES
+                              </span>
+                            </div>
 
-                            <div className="flex items-center gap-1 flex-1 min-w-[180px]">
+                            <div className="flex items-center gap-1 sm:w-60">
                               <input
                                 type="text"
                                 value={urlInputVal}
@@ -2658,7 +3232,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                                   });
                                   setNewBlockImageUrls((prev) => ({ ...prev, [bIdx]: '' }));
                                 }}
-                                className="text-[11.5px] border border-[rgba(0,0,0,0.3)] bg-neutral-50 px-2 py-1 hover:bg-neutral-100 cursor-pointer"
+                                className="text-[11.5px] border border-[rgba(0,0,0,0.3)] bg-neutral-50 px-2 py-1 hover:bg-neutral-100 cursor-pointer shrink-0"
                               >
                                 추가
                               </button>
@@ -2669,22 +3243,49 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 pt-1">
                               {blockImages.map((imgSrc, imgIdx) => {
                                 const badgeLabel = `${blockNum}.${imgIdx + 1}`;
+                                const isImgDragging =
+                                  draggedBlockImg?.blockIdx === bIdx &&
+                                  draggedBlockImg?.imgIdx === imgIdx;
+                                const isImgOver =
+                                  dragOverBlockImg?.blockIdx === bIdx &&
+                                  dragOverBlockImg?.imgIdx === imgIdx &&
+                                  !isImgDragging;
+
                                 return (
                                   <div
                                     key={imgIdx}
-                                    className="relative group bg-[#FAF9F6] border border-[rgba(0,0,0,0.2)] h-24 overflow-hidden"
+                                    draggable
+                                    onDragStart={(e) => handleDragStartBlockImg(e, bIdx, imgIdx)}
+                                    onDragEnter={(e) => handleDragEnterBlockImg(e, bIdx, imgIdx)}
+                                    onDragOver={handleDragOverBlockImg}
+                                    onDrop={(e) => handleDropBlockImg(e, bIdx, imgIdx)}
+                                    onDragEnd={handleDragEndBlockImg}
+                                    title="드래그하여 이미지 순서 변경 / 우측 하단 아이콘으로 자르기"
+                                    className={`relative group bg-[#FAF9F6] border h-24 overflow-hidden transition-all select-none cursor-grab active:cursor-grabbing ${
+                                      isImgDragging
+                                        ? 'opacity-30 scale-95 border-2 border-dashed border-black'
+                                        : isImgOver
+                                        ? 'ring-2 ring-black border-black scale-[1.03] shadow-md z-10'
+                                        : 'border-[rgba(0,0,0,0.2)] hover:border-black'
+                                    }`}
                                   >
                                     <img
                                       src={imgSrc}
                                       alt={badgeLabel}
-                                      className="w-full h-full object-cover"
+                                      className="w-full h-full object-cover pointer-events-none"
                                     />
-                                    <div className="absolute top-1 left-1 bg-black/85 text-white text-[9.5px] px-1.5 py-0.5 font-mono">
-                                      {badgeLabel} {imgIdx === 0 ? '(대표)' : ''}
+                                    <div className="absolute top-1 left-1 flex items-center gap-0.5 pointer-events-none">
+                                      <span className="bg-black/85 text-white text-[9.5px] px-1.5 py-0.5 font-mono">
+                                        {imgIdx === 0 ? '대표' : `#${imgIdx + 1}`}
+                                      </span>
+                                      <div className="bg-white/90 text-black p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <GripVertical size={10} />
+                                      </div>
                                     </div>
                                     <button
                                       type="button"
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         setMoreBlocks((prev) => {
                                           const copy = [...prev];
                                           copy[bIdx] = {
@@ -2694,17 +3295,18 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                                           return copy;
                                         });
                                       }}
-                                      className="absolute top-1 right-1 bg-black/80 text-white p-0.5 hover:bg-red-600 transition-colors cursor-pointer"
+                                      className="absolute top-1 right-1 bg-black/80 text-white p-0.5 hover:bg-red-600 transition-colors cursor-pointer z-10"
                                       title="삭제"
                                     >
                                       <X size={10} />
                                     </button>
-                                    <div className="absolute bottom-0 inset-x-0 bg-black/75 p-1 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="absolute bottom-0 inset-x-0 bg-black/75 p-1 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                       <div className="flex items-center gap-0.5">
                                         <button
                                           type="button"
                                           disabled={imgIdx === 0}
-                                          onClick={() => {
+                                          onClick={(e) => {
+                                            e.stopPropagation();
                                             setMoreBlocks((prev) => {
                                               const copy = [...prev];
                                               const imgs = [...copy[bIdx].images];
@@ -2722,7 +3324,8 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                                         <button
                                           type="button"
                                           disabled={imgIdx === blockImages.length - 1}
-                                          onClick={() => {
+                                          onClick={(e) => {
+                                            e.stopPropagation();
                                             setMoreBlocks((prev) => {
                                               const copy = [...prev];
                                               const imgs = [...copy[bIdx].images];
@@ -2740,21 +3343,23 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                                       </div>
                                       <button
                                         type="button"
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           setCropperState({
                                             isOpen: true,
                                             type: 'block-edit',
                                             blockIndex: bIdx,
                                             detailEditIndex: imgIdx,
                                             imageSrc: imgSrc,
-                                            title: `${badgeLabel} 이미지 자르기`,
+                                            title: `블록 #${blockNum} 이미지 자르기`,
                                             subtitle: `More 블록 #${blockNum} 이미지 구도 조정`,
                                           });
                                         }}
-                                        className="text-white p-0.5 cursor-pointer"
-                                        title="자르기"
+                                        className="text-white bg-black/70 hover:bg-black px-1 py-0.5 flex items-center gap-0.5 text-[9.5px] cursor-pointer"
+                                        title="자르기 & 비율 조절"
                                       >
                                         <Crop size={10} />
+                                        <span>자르기</span>
                                       </button>
                                     </div>
                                   </div>
@@ -2762,8 +3367,14 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                               })}
                             </div>
                           ) : (
-                            <div className="text-[11px] text-[rgba(0,0,0,0.45)] py-1">
-                              이 블록에 등록된 이미지가 없습니다. [+ 사진 추가] 버튼으로 대표(1.1) 및 서브(1.2, 1.3) 이미지를 등록하세요.
+                            <div
+                              onClick={() => {
+                                setActiveBlockUploadIdx(bIdx);
+                                setTimeout(() => blockFileInputRef.current?.click(), 0);
+                              }}
+                              className="text-[11px] text-[rgba(0,0,0,0.45)] py-3 text-center border border-dashed border-[rgba(0,0,0,0.15)] bg-[#FAFAFA] cursor-pointer hover:border-black transition-colors"
+                            >
+                              이 블록에 등록된 이미지가 없습니다. 여기에 사진 파일을 끌어다 놓거나 클릭하여 추가하세요.
                             </div>
                           )}
                         </div>
@@ -2829,11 +3440,23 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
 
                 <button
                   type="submit"
-                  disabled={isCompressing}
+                  disabled={isCompressing || isPublishing}
                   className="inline-flex items-center gap-1.5 bg-black text-white px-5 py-2 text-[13px] font-normal hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {isSaved ? <Check size={14} /> : <Plus size={14} />}
-                  <span>{isSaved ? '적용 완료!' : '웹사이트에 즉시 적용 (Publish)'}</span>
+                  {isPublishing ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : isSaved ? (
+                    <Check size={14} />
+                  ) : (
+                    <Plus size={14} />
+                  )}
+                  <span>
+                    {isPublishing
+                      ? '클라우드 및 서버에 사진 업로드 중...'
+                      : isSaved
+                      ? '적용 완료!'
+                      : '웹사이트에 즉시 적용 (Publish)'}
+                  </span>
                 </button>
               </div>
             </form>

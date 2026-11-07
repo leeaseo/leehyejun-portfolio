@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { fetchPortfolioFromFirestore, savePortfolioToFirestore } from './src/lib/firebase.js';
 
@@ -46,10 +47,13 @@ async function startServer() {
       }
       const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
       const buffer = Buffer.from(matches[2], 'base64');
+      const hash = crypto.createHash('md5').update(buffer).digest('hex').slice(0, 10);
       const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const filename = `${safePrefix}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}.${ext}`;
+      const filename = `${safePrefix}-${hash}.${ext}`;
       const filePath = path.join(imagesDir, filename);
-      fs.writeFileSync(filePath, buffer);
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, buffer);
+      }
       return `/images/work/${filename}`;
     }
 
@@ -144,35 +148,68 @@ async function startServer() {
 
 
 
-  // Read current shared content across all devices (Local Disk First + Cloud Firestore Fallback)
+  // Read current shared content across all devices (Compare Local Disk & Cloud Firestore by timestamp)
   app.get('/api/content', async (req, res) => {
     try {
-      // 1. Read from local disk custom-data.json (Source of Truth)
+      let localData: any = null;
       if (fs.existsSync(DATA_FILE)) {
         try {
           const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-          const localData = JSON.parse(raw);
-          if (localData && (localData.projects || localData.experiences)) {
-            return res.json(localData);
-          }
+          localData = JSON.parse(raw);
         } catch (e) {
           console.warn('[Server] Error reading local data file:', e);
         }
       }
 
-      // 2. Fallback to Cloud Firestore ONLY if local file is empty or missing
       const firestoreData = await fetchPortfolioFromFirestore();
-      if (firestoreData && Array.isArray((firestoreData as any).projects) && (firestoreData as any).projects.length > 0) {
-        const allProjs = (firestoreData as any).projects;
-        const workProjs = allProjs.filter((p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100));
-        const expProjs = allProjs.filter((p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100));
+      const localTime = localData?.updatedAt
+        ? new Date(localData.updatedAt).getTime()
+        : localData?.exportedAt
+        ? new Date(localData.exportedAt).getTime()
+        : 0;
+      const fsTime = firestoreData?.updatedAt
+        ? new Date(firestoreData.updatedAt).getTime()
+        : firestoreData?.exportedAt
+        ? new Date(firestoreData.exportedAt).getTime()
+        : 0;
 
-        const payload = {
-          ...firestoreData,
+      if (
+        firestoreData &&
+        Array.isArray((firestoreData as any).projects) &&
+        (firestoreData as any).projects.length > 0 &&
+        (!localData || fsTime > localTime)
+      ) {
+        const allProjs = (firestoreData as any).projects;
+        const workProjs = allProjs.filter(
+          (p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100)
+        );
+        const expProjs = allProjs.filter(
+          (p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100)
+        );
+
+        const rawPayload = {
+          about: firestoreData.about || localData?.about,
+          resume: firestoreData.resume || localData?.resume,
           projects: workProjs,
-          experiences: expProjs,
+          experiences: expProjs.length > 0 ? expProjs : localData?.experiences || [],
+          updatedAt: firestoreData.updatedAt || new Date().toISOString(),
+          exportedAt: firestoreData.exportedAt || firestoreData.updatedAt || new Date().toISOString(),
         };
-        return res.json(payload);
+
+        // Extract any offloaded base64 images from Firestore into static /public/images/work/*.jpg files
+        const diskSynced = extractAndSaveBase64Images(JSON.parse(JSON.stringify(rawPayload)));
+        try {
+          const jsonStr = JSON.stringify(diskSynced, null, 2);
+          fs.writeFileSync(DATA_FILE, jsonStr, 'utf-8');
+          fs.writeFileSync(path.resolve(__dirname, 'custom-data.json'), jsonStr, 'utf-8');
+        } catch (e) {
+          console.warn('[Server] Could not sync Firestore data to local disk:', e);
+        }
+        return res.json(diskSynced);
+      }
+
+      if (localData && (localData.projects || localData.experiences)) {
+        return res.json(localData);
       }
 
       return res.json(null);
@@ -252,6 +289,7 @@ async function startServer() {
   app.post('/api/publish', async (req, res) => {
     try {
       const payload = req.body;
+      const nowIso = new Date().toISOString();
       let current = { projects: [], about: {}, resume: {} };
       if (fs.existsSync(DATA_FILE)) {
         try {
@@ -259,13 +297,24 @@ async function startServer() {
         } catch {}
       }
 
-      // Automatically convert any base64 images into static image files in public/images/work
+      // Keep raw base64 copy for Cloud Firestore so new images survive across serverless containers
+      const firestoreCopy = JSON.parse(
+        JSON.stringify({
+          ...current,
+          ...payload,
+          updatedAt: nowIso,
+          exportedAt: nowIso,
+        })
+      );
+
+      // Automatically convert any base64 images into static image files in public/images/work for GitHub/disk
       const processedPayload = extractAndSaveBase64Images(payload);
 
       const updated = {
         ...current,
         ...processedPayload,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
+        exportedAt: nowIso,
       };
 
       // 1. Save to local disk file (src/content/custom-data.json, root custom-data.json, backup file)
@@ -278,10 +327,10 @@ async function startServer() {
         console.warn('[Server] Could not write to disk:', e);
       }
 
-      // 2. Save permanently to Google Cloud Firestore (documents are now lightweight ~2KB each!)
-      await savePortfolioToFirestore(updated);
+      // 2. Save permanently to Google Cloud Firestore (offloading new base64 images to /images collection)
+      await savePortfolioToFirestore(firestoreCopy);
 
-      console.log('[Server] Successfully saved portfolio data (lightweight JSON & static images) to disk & Cloud Firestore');
+      console.log('[Server] Successfully saved portfolio data to disk & Cloud Firestore');
       return res.json({ success: true, data: updated });
     } catch (err) {
       console.error('[Server] Failed to save content data:', err);

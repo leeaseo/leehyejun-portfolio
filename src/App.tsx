@@ -112,15 +112,21 @@ export default function App() {
     }
   }, []);
 
-  // Load and sync content: Compare Cloud Firestore and /api/content by timestamp so the latest Admin edits always win on Desktop & Mobile
+  // Load and sync content: Compare Browser IndexedDB, Cloud Firestore, and /api/content by timestamp so the latest Admin edits always win
   useEffect(() => {
     async function loadAllContent() {
       let serverData: any = null;
       let firestoreData: any = null;
+      let idbProjects: WorkProject[] | null = null;
+      let idbExperiences: WorkProject[] | null = null;
+      let idbMeta: { updatedAt?: string } | null = null;
 
-      const [serverRes, fsRes] = await Promise.allSettled([
+      const [serverRes, fsRes, idbProjRes, idbExpRes, idbMetaRes] = await Promise.allSettled([
         fetch('/api/content').then((r) => (r.ok ? r.json() : null)),
         fetchPortfolioFromFirestore(),
+        idbGet<WorkProject[]>('leehyejun_custom_projects'),
+        idbGet<WorkProject[]>('leehyejun_custom_experiences'),
+        idbGet<{ updatedAt?: string }>('leehyejun_custom_meta'),
       ]);
 
       if (serverRes.status === 'fulfilled' && serverRes.value) {
@@ -129,13 +135,58 @@ export default function App() {
       if (fsRes.status === 'fulfilled' && fsRes.value) {
         firestoreData = fsRes.value;
       }
+      if (idbProjRes.status === 'fulfilled' && Array.isArray(idbProjRes.value)) {
+        idbProjects = idbProjRes.value;
+      }
+      if (idbExpRes.status === 'fulfilled' && Array.isArray(idbExpRes.value)) {
+        idbExperiences = idbExpRes.value;
+      }
+      if (idbMetaRes.status === 'fulfilled' && idbMetaRes.value) {
+        idbMeta = idbMetaRes.value;
+      }
 
-      const serverTime = serverData?.exportedAt ? new Date(serverData.exportedAt).getTime() : 0;
+      const localTimeStr =
+        idbMeta?.updatedAt ||
+        (typeof window !== 'undefined' ? localStorage.getItem('leehyejun_local_updated_at') : null);
+      const idbTime = localTimeStr ? new Date(localTimeStr).getTime() : 0;
+
+      const serverTime = serverData?.updatedAt
+        ? new Date(serverData.updatedAt).getTime()
+        : serverData?.exportedAt
+        ? new Date(serverData.exportedAt).getTime()
+        : 0;
       const fsTime = firestoreData?.updatedAt
         ? new Date(firestoreData.updatedAt).getTime()
         : firestoreData?.exportedAt
         ? new Date(firestoreData.exportedAt).getTime()
         : 0;
+
+      const hasValidIdb =
+        idbProjects && idbProjects.length > 0 && !isStaleProjectData(idbProjects);
+
+      // Check if IndexedDB contains unsynced base64 images that failed to push earlier
+      const idbHasUnsyncedBase64 =
+        hasValidIdb &&
+        idbProjects!.some(
+          (p) =>
+            p.thumbnail?.startsWith('data:image/') ||
+            p.images?.some((img) => img?.startsWith('data:image/')) ||
+            p.moreBlocks?.some((b) => b.images?.some((img) => img?.startsWith('data:image/')))
+        );
+
+      // 1. If Browser IndexedDB is newer than both Firestore and Server (or has unsynced base64 photos), keep IndexedDB and push to cloud!
+      if (hasValidIdb && (idbTime > Math.max(fsTime, serverTime) || idbHasUnsyncedBase64)) {
+        const expList =
+          idbExperiences && idbExperiences.length > 0 ? idbExperiences : getExperienceProjects();
+        saveAllProjectsBatch(idbProjects!, expList, true);
+        setProjectsList(idbProjects!);
+        setExperienceProjectsList(expList);
+        syncToServer({
+          projects: idbProjects!,
+          experiences: expList,
+        });
+        return;
+      }
 
       const hasValidFs =
         firestoreData &&
@@ -149,7 +200,7 @@ export default function App() {
         serverData.projects.length > 0 &&
         !isStaleProjectData(serverData.projects);
 
-      // Prefer Firestore if it has valid data and is newer than (or equal to) server data
+      // 2. Prefer Firestore if it has valid data and is newer than (or equal to) server data
       if (hasValidFs && (!hasValidServer || fsTime >= serverTime)) {
         const fsProjects = firestoreData.projects;
         const workProjs = fsProjects.filter(
@@ -161,7 +212,8 @@ export default function App() {
 
         saveAllProjectsBatch(
           workProjs.length > 0 ? workProjs : getAllProjects(),
-          expProjs.length > 0 ? expProjs : getExperienceProjects()
+          expProjs.length > 0 ? expProjs : getExperienceProjects(),
+          true
         );
 
         if (workProjs.length > 0) {
@@ -172,16 +224,6 @@ export default function App() {
         }
         if (firestoreData.about) setAboutData(firestoreData.about);
         if (firestoreData.resume) setResumeData(firestoreData.resume);
-
-        // If Firestore is newer than server file, sync back to server custom-data.json
-        if (fsTime > serverTime) {
-          syncToServer({
-            projects: workProjs,
-            experiences: expProjs.length > 0 ? expProjs : serverData?.experiences,
-            about: firestoreData.about || serverData?.about,
-            resume: firestoreData.resume || serverData?.resume,
-          });
-        }
         return;
       }
 
@@ -190,7 +232,8 @@ export default function App() {
           serverData.projects,
           Array.isArray(serverData.experiences) && serverData.experiences.length > 0
             ? serverData.experiences
-            : getExperienceProjects()
+            : getExperienceProjects(),
+          true
         );
         setProjectsList(serverData.projects);
 
@@ -208,11 +251,9 @@ export default function App() {
         const bundledExp = getExperienceProjects();
         if (bundled.length > 0) {
           setProjectsList(bundled);
-          idbSet('leehyejun_custom_projects', bundled).catch(() => {});
         }
         if (bundledExp.length > 0) {
           setExperienceProjectsList(bundledExp);
-          idbSet('leehyejun_custom_experiences', bundledExp).catch(() => {});
         }
       } catch (err) {
         console.warn('[Cache] Sync error:', err);
