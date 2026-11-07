@@ -10,15 +10,32 @@ import { DEFAULT_EXPERIENCE_PROJECTS } from './experienceData';
 let memoryCustomProjects: WorkProject[] | null = null;
 let memoryExperienceProjects: WorkProject[] | null = null;
 
-// Initialize from newer localStorage if available, otherwise bundled custom-data.json
+// Detect when a new src/content/custom-data.json file has been uploaded/deployed
+export const BUNDLED_VERSION =
+  (customDataJson as any)?.updatedAt || (customDataJson as any)?.exportedAt || 'v1';
+
 try {
   if (typeof window !== 'undefined') {
-    const localTimeStr = localStorage.getItem('leehyejun_local_updated_at');
-    const localTime = localTimeStr ? new Date(localTimeStr).getTime() : 0;
-    const bundledTimeStr = (customDataJson as any)?.updatedAt || (customDataJson as any)?.exportedAt;
-    const bundledTime = bundledTimeStr ? new Date(bundledTimeStr).getTime() : 0;
+    const prevBundledVersion = localStorage.getItem('leehyejun_bundled_version');
 
-    if (localTime >= bundledTime) {
+    // Whenever a new custom-data.json is uploaded, its BUNDLED_VERSION changes -> always use the new custom-data.json!
+    if (prevBundledVersion !== BUNDLED_VERSION) {
+      localStorage.setItem('leehyejun_bundled_version', BUNDLED_VERSION);
+      localStorage.setItem('leehyejun_local_updated_at', BUNDLED_VERSION);
+      localStorage.removeItem('leehyejun_has_local_admin_edits');
+      localStorage.removeItem('leehyejun_custom_projects');
+      localStorage.removeItem('leehyejun_custom_experiences');
+      if (Array.isArray((customDataJson as any)?.projects)) {
+        idbSet('leehyejun_custom_projects', (customDataJson as any).projects).catch(() => {});
+      }
+      if (Array.isArray((customDataJson as any)?.experiences)) {
+        idbSet('leehyejun_custom_experiences', (customDataJson as any).experiences).catch(() => {});
+      }
+      idbSet('leehyejun_custom_meta', {
+        updatedAt: BUNDLED_VERSION,
+        bundledVersion: BUNDLED_VERSION,
+      }).catch(() => {});
+    } else {
       const rawProjs = localStorage.getItem('leehyejun_custom_projects');
       if (rawProjs) {
         const parsed = JSON.parse(rawProjs);
@@ -550,7 +567,10 @@ export function saveAllProjectsBatch(
     idbSet('leehyejun_custom_experiences', experiences).catch(() => {});
     if (!skipNetworkSync) {
       const nowIso = new Date().toISOString();
-      idbSet('leehyejun_custom_meta', { updatedAt: nowIso }).catch(() => {});
+      idbSet('leehyejun_custom_meta', {
+        updatedAt: nowIso,
+        bundledVersion: BUNDLED_VERSION,
+      }).catch(() => {});
       try {
         localStorage.setItem('leehyejun_local_updated_at', nowIso);
       } catch {}

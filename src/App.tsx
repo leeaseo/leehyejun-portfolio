@@ -12,6 +12,7 @@ import {
   isExperienceSlug,
   saveAllProjectsBatch,
   syncToServer,
+  BUNDLED_VERSION,
 } from './lib/content';
 import { WorkProject, AboutData, ResumeData } from './lib/types';
 import { idbGet, idbSet } from './lib/idbStorage';
@@ -129,21 +130,17 @@ export default function App() {
       let firestoreData: any = null;
       let idbProjects: WorkProject[] | null = null;
       let idbExperiences: WorkProject[] | null = null;
-      let idbMeta: { updatedAt?: string } | null = null;
+      let idbMeta: { updatedAt?: string; bundledVersion?: string } | null = null;
 
-      const [serverRes, fsRes, idbProjRes, idbExpRes, idbMetaRes] = await Promise.allSettled([
+      const [serverRes, idbProjRes, idbExpRes, idbMetaRes] = await Promise.allSettled([
         fetch('/api/content').then((r) => (r.ok ? r.json() : null)),
-        fetchPortfolioFromFirestore(),
         idbGet<WorkProject[]>('leehyejun_custom_projects'),
         idbGet<WorkProject[]>('leehyejun_custom_experiences'),
-        idbGet<{ updatedAt?: string }>('leehyejun_custom_meta'),
+        idbGet<{ updatedAt?: string; bundledVersion?: string }>('leehyejun_custom_meta'),
       ]);
 
       if (serverRes.status === 'fulfilled' && serverRes.value) {
         serverData = serverRes.value;
-      }
-      if (fsRes.status === 'fulfilled' && fsRes.value) {
-        firestoreData = fsRes.value;
       }
       if (idbProjRes.status === 'fulfilled' && Array.isArray(idbProjRes.value)) {
         idbProjects = idbProjRes.value;
@@ -155,41 +152,24 @@ export default function App() {
         idbMeta = idbMetaRes.value;
       }
 
-      const localTimeStr =
-        idbMeta?.updatedAt ||
-        (typeof window !== 'undefined' ? localStorage.getItem('leehyejun_local_updated_at') : null);
-      const idbTime = localTimeStr ? new Date(localTimeStr).getTime() : 0;
+      const isSameBundledVersion = idbMeta?.bundledVersion === BUNDLED_VERSION;
+      const idbTime =
+        isSameBundledVersion && idbMeta?.updatedAt ? new Date(idbMeta.updatedAt).getTime() : 0;
 
       const serverTime = serverData?.updatedAt
         ? new Date(serverData.updatedAt).getTime()
         : serverData?.exportedAt
         ? new Date(serverData.exportedAt).getTime()
         : 0;
-      const fsTime = firestoreData?.updatedAt
-        ? new Date(firestoreData.updatedAt).getTime()
-        : firestoreData?.exportedAt
-        ? new Date(firestoreData.exportedAt).getTime()
-        : 0;
 
       const hasValidIdb =
-        idbProjects && idbProjects.length > 0 && !isStaleProjectData(idbProjects);
+        isSameBundledVersion &&
+        idbProjects &&
+        idbProjects.length > 0 &&
+        !isStaleProjectData(idbProjects);
 
-      const hasLocalAdminEdits =
-        typeof window !== 'undefined' &&
-        localStorage.getItem('leehyejun_has_local_admin_edits') === 'true';
-
-      // Check if IndexedDB contains unsynced base64 images that failed to push earlier
-      const idbHasUnsyncedBase64 =
-        hasValidIdb &&
-        idbProjects!.some(
-          (p) =>
-            p.thumbnail?.startsWith('data:image/') ||
-            p.images?.some((img) => img?.startsWith('data:image/')) ||
-            p.moreBlocks?.some((b) => b.images?.some((img) => img?.startsWith('data:image/')))
-        );
-
-      // 1. If Browser IndexedDB is valid and has local Admin edits, is newer, or has unsynced base64 photos, keep IndexedDB!
-      if (hasValidIdb && (hasLocalAdminEdits || idbTime > Math.max(fsTime, serverTime) || idbHasUnsyncedBase64)) {
+      // 1. Only use Browser IndexedDB if it was created on the CURRENT custom-data.json version AND is strictly newer
+      if (hasValidIdb && idbTime > serverTime) {
         const expList =
           idbExperiences && idbExperiences.length > 0 ? idbExperiences : getExperienceProjects();
         saveAllProjectsBatch(idbProjects!, expList, true);
@@ -198,44 +178,14 @@ export default function App() {
         return;
       }
 
-      const hasValidFs =
-        firestoreData &&
-        Array.isArray(firestoreData.projects) &&
-        firestoreData.projects.length > 0 &&
-        !isStaleProjectData(firestoreData.projects);
+      const bundledTime = BUNDLED_VERSION !== 'v1' ? new Date(BUNDLED_VERSION).getTime() : 0;
 
       const hasValidServer =
         serverData &&
         Array.isArray(serverData.projects) &&
         serverData.projects.length > 0 &&
-        !isStaleProjectData(serverData.projects);
-
-      // 2. Prefer Firestore if it has valid data and is newer than (or equal to) server data
-      if (hasValidFs && (!hasValidServer || fsTime >= serverTime)) {
-        const fsProjects = firestoreData.projects;
-        const workProjs = fsProjects.filter(
-          (p: any) => !isExperienceSlug(p?.slug) && (!p?.order || p.order < 100)
-        );
-        const expProjs = fsProjects.filter(
-          (p: any) => isExperienceSlug(p?.slug) || (p?.order && p.order >= 100)
-        );
-
-        saveAllProjectsBatch(
-          workProjs.length > 0 ? workProjs : getAllProjects(),
-          expProjs.length > 0 ? expProjs : getExperienceProjects(),
-          true
-        );
-
-        if (workProjs.length > 0) {
-          setProjectsList(workProjs);
-        }
-        if (expProjs.length > 0) {
-          setExperienceProjectsList(expProjs);
-        }
-        if (firestoreData.about) setAboutData(firestoreData.about);
-        if (firestoreData.resume) setResumeData(firestoreData.resume);
-        return;
-      }
+        !isStaleProjectData(serverData.projects) &&
+        serverTime >= bundledTime;
 
       if (hasValidServer) {
         saveAllProjectsBatch(

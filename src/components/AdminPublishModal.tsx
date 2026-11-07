@@ -28,6 +28,7 @@ import {
   saveExperienceProject,
   saveAllProjectsBatch,
   isExperienceSlug,
+  BUNDLED_VERSION,
 } from '../lib/content';
 import { getHonorSlug } from '../lib/experienceData';
 import { savePortfolioToFirestore, deleteProjectFromFirestore } from '../lib/firebase';
@@ -263,21 +264,16 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         let pList = getAllProjects();
         let expList = getExperienceProjects();
         try {
-          const [idbProjs, idbExps] = await Promise.all([
+          const [idbProjs, idbExps, idbMeta] = await Promise.all([
             idbGet<WorkProject[]>('leehyejun_custom_projects'),
             idbGet<WorkProject[]>('leehyejun_custom_experiences'),
+            idbGet<{ updatedAt?: string; bundledVersion?: string }>('leehyejun_custom_meta'),
           ]);
-          const idbP0 = Array.isArray(idbProjs)
-            ? idbProjs.find((p) => p.slug === 'mobile-display-system')
-            : null;
-          if (
-            Array.isArray(idbProjs) &&
-            idbProjs.length > 0 &&
-            (!idbP0 || (idbP0.moreBlocks && idbP0.moreBlocks.length >= 4))
-          ) {
+          const isCurrentVersion = idbMeta?.bundledVersion === BUNDLED_VERSION;
+          if (isCurrentVersion && Array.isArray(idbProjs) && idbProjs.length > 0) {
             pList = idbProjs;
           }
-          if (Array.isArray(idbExps) && idbExps.length > 0) {
+          if (isCurrentVersion && Array.isArray(idbExps) && idbExps.length > 0) {
             expList = idbExps;
           }
         } catch {}
@@ -463,7 +459,10 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       setModifiedSlugs((prev) => new Set(prev).add(targetSlug));
       saveAllProjectsBatch(nextProjects, nextExperiences, true);
       const nowIso = new Date().toISOString();
-      idbSet('leehyejun_custom_meta', { updatedAt: nowIso }).catch(() => {});
+      idbSet('leehyejun_custom_meta', {
+        updatedAt: nowIso,
+        bundledVersion: BUNDLED_VERSION,
+      }).catch(() => {});
       try {
         localStorage.setItem('leehyejun_local_updated_at', nowIso);
         localStorage.setItem('leehyejun_has_local_admin_edits', 'true');
