@@ -306,6 +306,15 @@ export function isExperienceSlug(slug?: string): boolean {
 
 function isStaleProjectList(projs?: WorkProject[]): boolean {
   if (!projs || !Array.isArray(projs) || projs.length === 0) return true;
+  const p0 = projs.find((p) => p.slug === 'mobile-display-system');
+  if (
+    p0 &&
+    (!p0.moreBlocks ||
+      p0.moreBlocks.length < 4 ||
+      (p0.moreBlocks.length === 3 && p0.moreBlocks[2]?.title === '디자인 방향성'))
+  ) {
+    return true;
+  }
   return projs.some(
     (p) =>
       p.title === 'Mobile Display System' ||

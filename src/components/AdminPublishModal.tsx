@@ -267,7 +267,14 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
             idbGet<WorkProject[]>('leehyejun_custom_projects'),
             idbGet<WorkProject[]>('leehyejun_custom_experiences'),
           ]);
-          if (Array.isArray(idbProjs) && idbProjs.length > 0) {
+          const idbP0 = Array.isArray(idbProjs)
+            ? idbProjs.find((p) => p.slug === 'mobile-display-system')
+            : null;
+          if (
+            Array.isArray(idbProjs) &&
+            idbProjs.length > 0 &&
+            (!idbP0 || (idbP0.moreBlocks && idbP0.moreBlocks.length >= 4))
+          ) {
             pList = idbProjs;
           }
           if (Array.isArray(idbExps) && idbExps.length > 0) {
@@ -453,19 +460,16 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
 
       setDraftProjects(nextProjects);
       setDraftExperiences(nextExperiences);
+      setModifiedSlugs((prev) => new Set(prev).add(targetSlug));
       saveAllProjectsBatch(nextProjects, nextExperiences, true);
       const nowIso = new Date().toISOString();
       idbSet('leehyejun_custom_meta', { updatedAt: nowIso }).catch(() => {});
       try {
         localStorage.setItem('leehyejun_local_updated_at', nowIso);
+        localStorage.setItem('leehyejun_has_local_admin_edits', 'true');
       } catch {}
       onBatchUpdated?.(nextProjects, nextExperiences);
-
-      // Save only the currently edited project to Cloud Firestore in background (no disk write reload)
-      savePortfolioToFirestore(
-        isExp ? { experiences: [currentData] } : { projects: [currentData] }
-      ).catch(() => {});
-    }, 600);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [
@@ -493,63 +497,122 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExportData = async () => {
-    try {
-      showToast('📦 사진과 데이터를 포함한 올인원 백업 파일을 생성 중입니다...');
-      const res = await fetch('/api/backup-full');
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `custom-data.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-        showToast('✅ 사진 135장이 모두 포함된 custom-data.json이 다운로드되었습니다! 깃허브에 업로드하시면 사진이 즉시 정상 출력됩니다.');
-        return;
-      }
-    } catch {}
+    showToast('📦 현재 작업 내용을 백업 파일(custom-data.json)로 즉시 생성 중입니다...');
 
-    // Fallback: Convert client images to base64
-    const urlToBase64 = async (imgUrl: string): Promise<string> => {
-      if (!imgUrl || imgUrl.startsWith('data:') || imgUrl.startsWith('http')) return imgUrl;
-      try {
-        const response = await fetch(imgUrl);
-        const blob = await response.blob();
-        return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = () => resolve(imgUrl);
-          reader.readAsDataURL(blob);
+    // 1. Merge currently open form edits into draft arrays so nothing on screen is missed
+    let exportProjects = [...draftProjects];
+    let exportExperiences = [...draftExperiences];
+    const activeTitle = title.trim();
+    const activeSlug = (
+      editingSlug ||
+      slug.trim() ||
+      activeTitle.toLowerCase().replace(/[^a-z0-9가-힣\s-]/g, '').trim().replace(/\s+/g, '-')
+    ).trim();
+
+    if (activeSlug || activeTitle || thumbnail || detailImages.length > 0 || processImages.length > 0) {
+      const targetSlug = activeSlug || `project-${Date.now()}`;
+      const syncedContent =
+        moreBlocks.length > 0
+          ? moreBlocks
+              .map((b) => `${b.title ? `### ${b.title}\n` : ''}${b.description || ''}`.trim())
+              .filter(Boolean)
+              .join('\n\n')
+          : content;
+
+      const cleanedSpecs = customSpecs
+        .filter((s) => s.label.trim() !== '')
+        .map((s) => ({ label: s.label.trim(), value: s.value }));
+
+      const findSpecVal = (lbl: string, fallback: string) => {
+        const found = cleanedSpecs.find((s) => s.label.toLowerCase() === lbl.toLowerCase());
+        return found ? found.value : fallback;
+      };
+
+      const currentData: WorkProject = {
+        title: activeTitle || 'Untitled',
+        slug: targetSlug,
+        date: date || '2026',
+        brand: findSpecVal('brand', brand),
+        processScope: findSpecVal('process scope', processScope),
+        customSpecs: cleanedSpecs,
+        thumbnail: thumbnail || '',
+        images: detailImages,
+        processImages: processImages,
+        contribution: {
+          phases: contributionPhases.filter((ph) => ph.label.trim() !== ''),
+        },
+        moreBlocks: moreBlocks,
+        materials: findSpecVal('materials', materials),
+        dimensions: findSpecVal('dimensions', dimensions),
+        externalUrl: externalUrl || undefined,
+        order: Number(order) || (exportProjects.length + 1),
+        content: syncedContent || content || '프로젝트 상세 내용입니다.',
+      };
+
+      const isExp =
+        Number(order) >= 100 ||
+        isExperienceSlug(targetSlug) ||
+        exportExperiences.some((e) => e.slug === targetSlug);
+
+      if (isExp) {
+        let found = false;
+        exportExperiences = exportExperiences.map((e) => {
+          if (e.slug === targetSlug) {
+            found = true;
+            return { ...e, ...currentData };
+          }
+          return e;
         });
-      } catch {
-        return imgUrl;
+        if (!found) exportExperiences.push(currentData);
+      } else {
+        let found = false;
+        exportProjects = exportProjects.map((p) => {
+          if (p.slug === targetSlug) {
+            found = true;
+            return { ...p, ...currentData };
+          }
+          return p;
+        });
+        if (!found) exportProjects.push(currentData);
+        exportProjects.sort((a, b) => (a.order || 99) - (b.order || 99));
       }
-    };
 
-    const rawProjs = getAllProjects();
-    const projsWithImages = await Promise.all(
-      rawProjs.map(async (p) => ({
-        ...p,
-        thumbnail: await urlToBase64(p.thumbnail),
-        images: await Promise.all((p.images || []).map(urlToBase64)),
-      }))
-    );
+      setDraftProjects(exportProjects);
+      setDraftExperiences(exportExperiences);
+      setProjectsList(exportProjects);
+      saveAllProjectsBatch(exportProjects, exportExperiences, true);
+      onBatchUpdated?.(exportProjects, exportExperiences);
+    }
 
+    const nowIso = new Date().toISOString();
     const data = {
-      about: getAboutData(),
-      resume: getResumeData(),
-      projects: projsWithImages,
-      experiences: getExperienceProjects(),
-      exportedAt: new Date().toISOString(),
+      about: aboutForm || getAboutData(),
+      resume: resumeForm || getResumeData(),
+      projects: exportProjects,
+      experiences: exportExperiences,
+      updatedAt: nowIso,
+      exportedAt: nowIso,
     };
+
+    // 2. Immediately trigger file download in browser (< 0.2s, zero waiting on server)
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `custom-data.json`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    showToast('✅ 사진 135장이 모두 포함된 custom-data.json이 다운로드되었습니다! 깃허브에 업로드하시면 사진이 즉시 정상 출력됩니다.');
+
+    // 3. Also sync to server & Firestore in background so live web stays in sync
+    fetch('/api/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).catch(() => {});
+
+    showToast('✅ 최신 작업분 전체가 포함된 custom-data.json이 즉시 다운로드되었습니다! 깃허브 src/content/custom-data.json에 바로 업로드하시면 됩니다.');
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1508,14 +1571,36 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
       onProjectAdded(publishedProject);
     }
 
-    // 4. Single atomic sync to Cloud Firestore (with chunked image offloading) AND local server disk
+    // 4. Fast sync: only push modified project(s) to Cloud Firestore + full state to /api/publish
+    const slugsToPush = new Set(modifiedSlugs);
+    if (publishedProject?.slug) slugsToPush.add(publishedProject.slug);
+    const changedWork = finalProjects.filter((p) => slugsToPush.has(p.slug));
+    const changedExp = finalExperiences.filter((e) => slugsToPush.has(e.slug));
+
     try {
-      await syncToServer({
-        projects: finalProjects,
-        experiences: finalExperiences,
-        about: aboutForm,
-        resume: resumeForm,
-      });
+      try {
+        localStorage.setItem('leehyejun_has_local_admin_edits', 'true');
+      } catch {}
+
+      await Promise.allSettled([
+        fetch('/api/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projects: finalProjects,
+            experiences: finalExperiences,
+            about: aboutForm,
+            resume: resumeForm,
+          }),
+        }),
+        savePortfolioToFirestore({
+          projects: changedWork.length > 0 ? changedWork : publishedProject ? [publishedProject] : finalProjects,
+          experiences: changedExp.length > 0 ? changedExp : undefined,
+          about: aboutForm,
+          resume: resumeForm,
+        }),
+      ]);
+      setModifiedSlugs(new Set());
     } catch (err) {
       console.error('[Publish] Sync error:', err);
     } finally {
@@ -1527,7 +1612,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
     setTimeout(() => {
       setIsSaved(false);
       onClose();
-    }, 600);
+    }, 400);
   };
 
   // About Form Save Handler

@@ -16,6 +16,32 @@ const dbId = (firebaseConfig as any).firestoreDatabaseId;
 export const db = dbId ? getFirestore(app, dbId) : getFirestore(app);
 
 const FS_IMG_PREFIX = '__fs_img__:';
+const uploadedImageIds = new Set<string>();
+let firestoreQuotaExhausted = false;
+
+function withWriteTimeout<T>(promise: Promise<T>, ms = 2500): Promise<T> {
+  if (firestoreQuotaExhausted) {
+    return Promise.reject(new Error('FIRESTORE_QUOTA_EXHAUSTED'));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      firestoreQuotaExhausted = true;
+      reject(new Error('FIRESTORE_WRITE_TIMEOUT'));
+    }, ms);
+    promise
+      .then((val) => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        if (err?.code === 'resource-exhausted' || String(err).includes('RESOURCE_EXHAUSTED')) {
+          firestoreQuotaExhausted = true;
+        }
+        reject(err);
+      });
+  });
+}
 
 function hashBase64Id(slug: string, dataUrl: string): string {
   let h1 = 0xdeadbeef ^ dataUrl.length;
@@ -37,39 +63,52 @@ async function offloadBase64Image(slug: string, imgStr: string): Promise<string>
   if (!imgStr || typeof imgStr !== 'string' || !imgStr.startsWith('data:image/')) {
     return imgStr;
   }
+  if (firestoreQuotaExhausted) {
+    return imgStr;
+  }
   const imgId = hashBase64Id(slug, imgStr);
+  if (uploadedImageIds.has(imgId)) {
+    return `${FS_IMG_PREFIX}${imgId}`;
+  }
   try {
     const imgRef = doc(db, 'images', imgId);
-    // Split into chunks of 700,000 chars so even multi-MB base64 strings never exceed Firestore's 1MB limit
-    const CHUNK_SIZE = 700000;
+    // Split into chunks of 680,000 chars so even multi-MB base64 strings never exceed Firestore's 1MB limit
+    const CHUNK_SIZE = 680000;
     if (imgStr.length <= CHUNK_SIZE) {
-      await setDoc(imgRef, {
-        slug,
-        dataUrl: imgStr,
-        chunkCount: 1,
-        updatedAt: new Date().toISOString(),
-      });
+      await withWriteTimeout(
+        setDoc(imgRef, {
+          slug,
+          dataUrl: imgStr,
+          chunkCount: 1,
+          updatedAt: new Date().toISOString(),
+        })
+      );
     } else {
       const chunks: string[] = [];
       for (let i = 0; i < imgStr.length; i += CHUNK_SIZE) {
         chunks.push(imgStr.slice(i, i + CHUNK_SIZE));
       }
-      await setDoc(imgRef, {
-        slug,
-        chunkCount: chunks.length,
-        updatedAt: new Date().toISOString(),
-      });
+      await withWriteTimeout(
+        setDoc(imgRef, {
+          slug,
+          chunkCount: chunks.length,
+          updatedAt: new Date().toISOString(),
+        })
+      );
       for (let c = 0; c < chunks.length; c++) {
-        await setDoc(doc(db, 'images', `${imgId}_part_${c}`), {
-          part: c,
-          data: chunks[c],
-        });
+        await withWriteTimeout(
+          setDoc(doc(db, 'images', `${imgId}_part_${c}`), {
+            part: c,
+            data: chunks[c],
+          })
+        );
       }
     }
+    uploadedImageIds.add(imgId);
     return `${FS_IMG_PREFIX}${imgId}`;
   } catch (err) {
     console.warn('[Firestore] Failed to offload image:', imgId, err);
-    return imgStr;
+    return imgStr.length > 150000 ? `${FS_IMG_PREFIX}${imgId}` : imgStr;
   }
 }
 
@@ -81,6 +120,7 @@ async function resolveOffloadedImage(
     return imgStr;
   }
   const imgId = imgStr.slice(FS_IMG_PREFIX.length);
+  uploadedImageIds.add(imgId);
   if (imageCache.has(imgId)) {
     return imageCache.get(imgId)!;
   }
@@ -205,13 +245,15 @@ export async function savePortfolioToFirestore(data: {
   about?: any;
   resume?: any;
 }): Promise<boolean> {
+  if (firestoreQuotaExhausted) {
+    return false;
+  }
   try {
     const nowIso = new Date().toISOString();
-    // 1. Save individual projects to /projects/{slug} collection, offloading any base64 images to /project_images
     const allProjs = [...(data.projects || []), ...(data.experiences || [])];
     if (allProjs.length > 0) {
       for (const proj of allProjs) {
-        if (!proj.slug) continue;
+        if (!proj.slug || firestoreQuotaExhausted) continue;
         try {
           const slug = proj.slug;
           const lightProj: WorkProject = { ...proj };
@@ -220,25 +262,37 @@ export async function savePortfolioToFirestore(data: {
             lightProj.thumbnail = await offloadBase64Image(slug, lightProj.thumbnail);
           }
           if (Array.isArray(lightProj.images)) {
-            lightProj.images = await Promise.all(
-              lightProj.images.map((img) => offloadBase64Image(slug, img))
-            );
+            const nextImages: string[] = [];
+            for (const img of lightProj.images) {
+              nextImages.push(await offloadBase64Image(slug, img));
+            }
+            lightProj.images = nextImages;
           }
           if (Array.isArray(lightProj.processImages)) {
-            lightProj.processImages = await Promise.all(
-              lightProj.processImages.map((img) => offloadBase64Image(slug, img))
-            );
+            const nextProc: string[] = [];
+            for (const img of lightProj.processImages) {
+              nextProc.push(await offloadBase64Image(slug, img));
+            }
+            lightProj.processImages = nextProc;
           }
           if (Array.isArray(lightProj.moreBlocks)) {
-            lightProj.moreBlocks = await Promise.all(
-              lightProj.moreBlocks.map(async (b) => ({
+            const nextBlocks = [];
+            for (const b of lightProj.moreBlocks) {
+              const nextBlockImgs: string[] = [];
+              if (Array.isArray(b.images)) {
+                for (const img of b.images) {
+                  nextBlockImgs.push(await offloadBase64Image(slug, img));
+                }
+              }
+              nextBlocks.push({
                 ...b,
-                images: Array.isArray(b.images)
-                  ? await Promise.all(b.images.map((img) => offloadBase64Image(slug, img)))
-                  : [],
-              }))
-            );
+                images: nextBlockImgs,
+              });
+            }
+            lightProj.moreBlocks = nextBlocks;
           }
+
+          if (firestoreQuotaExhausted) break;
 
           // Strip any undefined fields that Firestore rejects
           const cleanDoc = JSON.parse(
@@ -249,12 +303,14 @@ export async function savePortfolioToFirestore(data: {
           );
 
           const projRef = doc(db, 'projects', slug);
-          await setDoc(projRef, cleanDoc);
+          await withWriteTimeout(setDoc(projRef, cleanDoc));
         } catch (projErr) {
-          console.error(`[Firestore] Failed to save project ${proj.slug}:`, projErr);
+          console.warn(`[Firestore] Skipped project ${proj.slug} cloud write:`, projErr);
         }
       }
     }
+
+    if (firestoreQuotaExhausted) return false;
 
     // 2. Save global metadata to /content/portfolio
     const contentRef = doc(db, 'content', 'portfolio');
@@ -264,7 +320,7 @@ export async function savePortfolioToFirestore(data: {
     };
     if (data.about) metaPayload.about = JSON.parse(JSON.stringify(data.about));
     if (data.resume) metaPayload.resume = JSON.parse(JSON.stringify(data.resume));
-    if (data.projects) {
+    if (data.projects && data.projects.length > 1) {
       metaPayload.projectManifest = data.projects.map((p) => ({
         slug: p.slug,
         title: p.title,
@@ -272,11 +328,11 @@ export async function savePortfolioToFirestore(data: {
       }));
     }
 
-    await setDoc(contentRef, metaPayload, { merge: true });
+    await withWriteTimeout(setDoc(contentRef, metaPayload, { merge: true }));
     console.log('[Firestore] Successfully saved projects & offloaded images to Cloud Firestore!');
     return true;
   } catch (err) {
-    console.error('[Firestore] Failed to save portfolio:', err);
+    console.warn('[Firestore] Cloud write skipped (local/GitHub backup active):', err);
     return false;
   }
 }

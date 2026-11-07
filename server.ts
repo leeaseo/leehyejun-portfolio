@@ -327,10 +327,10 @@ async function startServer() {
         console.warn('[Server] Could not write to disk:', e);
       }
 
-      // 2. Save permanently to Google Cloud Firestore (offloading new base64 images to /images collection)
-      await savePortfolioToFirestore(firestoreCopy);
+      // 2. Save to Google Cloud Firestore in background without blocking HTTP response
+      savePortfolioToFirestore(firestoreCopy).catch(() => {});
 
-      console.log('[Server] Successfully saved portfolio data to disk & Cloud Firestore');
+      console.log('[Server] Successfully saved portfolio data to disk');
       return res.json({ success: true, data: updated });
     } catch (err) {
       console.error('[Server] Failed to save content data:', err);

@@ -81,9 +81,18 @@ export default function App() {
     }
   }, [mobileTab]);
 
-  // Robust check for stale placeholder data
+  // Robust check for stale placeholder data or pre-recovery 3-block Yeonhui duplicate
   const isStaleProjectData = (projs?: WorkProject[]): boolean => {
     if (!projs || !Array.isArray(projs) || projs.length === 0) return true;
+    const p0 = projs.find((p) => p.slug === 'mobile-display-system');
+    if (
+      p0 &&
+      (!p0.moreBlocks ||
+        p0.moreBlocks.length < 4 ||
+        (p0.moreBlocks.length === 3 && p0.moreBlocks[2]?.title === '디자인 방향성'))
+    ) {
+      return true;
+    }
     return projs.some(
       (p) =>
         p.title === 'Mobile Display System' ||
@@ -101,6 +110,7 @@ export default function App() {
         if (raw && isStaleProjectData(JSON.parse(raw))) {
           localStorage.removeItem('leehyejun_custom_projects');
           localStorage.removeItem('leehyejun_custom_experiences');
+          localStorage.removeItem('leehyejun_has_local_admin_edits');
           const fresh = getAllProjects();
           const freshExp = getExperienceProjects();
           idbSet('leehyejun_custom_projects', fresh).catch(() => {});
@@ -164,6 +174,10 @@ export default function App() {
       const hasValidIdb =
         idbProjects && idbProjects.length > 0 && !isStaleProjectData(idbProjects);
 
+      const hasLocalAdminEdits =
+        typeof window !== 'undefined' &&
+        localStorage.getItem('leehyejun_has_local_admin_edits') === 'true';
+
       // Check if IndexedDB contains unsynced base64 images that failed to push earlier
       const idbHasUnsyncedBase64 =
         hasValidIdb &&
@@ -174,17 +188,13 @@ export default function App() {
             p.moreBlocks?.some((b) => b.images?.some((img) => img?.startsWith('data:image/')))
         );
 
-      // 1. If Browser IndexedDB is newer than both Firestore and Server (or has unsynced base64 photos), keep IndexedDB and push to cloud!
-      if (hasValidIdb && (idbTime > Math.max(fsTime, serverTime) || idbHasUnsyncedBase64)) {
+      // 1. If Browser IndexedDB is valid and has local Admin edits, is newer, or has unsynced base64 photos, keep IndexedDB!
+      if (hasValidIdb && (hasLocalAdminEdits || idbTime > Math.max(fsTime, serverTime) || idbHasUnsyncedBase64)) {
         const expList =
           idbExperiences && idbExperiences.length > 0 ? idbExperiences : getExperienceProjects();
         saveAllProjectsBatch(idbProjects!, expList, true);
         setProjectsList(idbProjects!);
         setExperienceProjectsList(expList);
-        syncToServer({
-          projects: idbProjects!,
-          experiences: expList,
-        });
         return;
       }
 
