@@ -337,43 +337,24 @@ function isStaleProjectList(projs?: WorkProject[]): boolean {
 
 export function cleanProjectData(p: WorkProject): WorkProject {
   if (!p) return p;
-  const safeSlug = (p.slug || '').replace(/[^a-zA-Z0-9_-]/g, '_');
   const isShowroom = p.slug === 'mobile-display-system';
   const isExp = isExperienceSlug(p.slug) || (typeof p.order === 'number' && p.order >= 100);
 
-  let cleanImages = Array.isArray(p.images)
-    ? p.images.filter(
-        (img) =>
-          Boolean(img) &&
-          !img.includes('display-system-1.jpg') &&
-          !img.includes('display-system-2.jpg')
-      )
-    : [];
+  const isValidImg = (img?: string) =>
+    Boolean(
+      img &&
+        !img.startsWith('data:text/') &&
+        !img.startsWith('data:application/') &&
+        !img.includes('display-system-1.jpg') &&
+        !img.includes('display-system-2.jpg')
+    );
 
-  // Deduplicate cleanImages
-  cleanImages = Array.from(new Set(cleanImages));
-
-  const numberedPhotoRegex = new RegExp(
-    `^/images/work/${safeSlug}-\\d{2}(-[a-f0-9]+)?\\.(jpg|jpeg|png|webp)$`,
-    'i'
-  );
-  const photoSet = new Set(cleanImages);
-
-  // Clean moreBlocks: remove any numbered lifestyle shots that were auto-copied from Photo by legacy buildEditorialBlocks
-  let cleanBlocks = Array.isArray(p.moreBlocks)
-    ? p.moreBlocks.map((b) => {
-        const rawBlockImgs = Array.isArray(b?.images) ? b.images.filter(Boolean) : [];
-        const dedupedBlockImgs = Array.from(new Set(rawBlockImgs)).filter((img) => {
-          if (photoSet.has(img) && numberedPhotoRegex.test(img)) {
-            return false;
-          }
-          return true;
-        });
-        return {
-          ...b,
-          images: dedupedBlockImgs,
-        };
-      })
+  // Never strip user images from moreBlocks — only filter out corrupted non-image strings
+  const cleanBlocks = Array.isArray(p.moreBlocks)
+    ? p.moreBlocks.map((b) => ({
+        ...b,
+        images: Array.isArray(b?.images) ? b.images.filter(isValidImg) : [],
+      }))
     : undefined;
 
   const moreImgSet = new Set<string>();
@@ -385,26 +366,29 @@ export function cleanProjectData(p: WorkProject): WorkProject {
     }
   }
 
-  let cleanThumb = p.thumbnail || '';
+  let cleanImages = Array.isArray(p.images)
+    ? Array.from(new Set(p.images.filter(isValidImg)))
+    : [];
+
+  let cleanThumb = isValidImg(p.thumbnail) ? p.thumbnail : '';
 
   if (isShowroom) {
-    // For 01. YEONHUI SHOWROOM, keep the exterior building shot at the front of images and clear separate thumbnail
     if (cleanThumb && !cleanImages.includes(cleanThumb) && !moreImgSet.has(cleanThumb)) {
       cleanImages = [cleanThumb, ...cleanImages];
     }
     cleanThumb = '';
   } else if (!isExp) {
-    // For furniture projects (#2-#9), never keep a separate thumbnail when Photo images exist (prevents cutout duplication in Photo)
+    // For furniture projects (#2-#9), clear separate thumbnail when Photo images exist so the cutout in thumbnail never duplicates at the top of Photo
     if (cleanImages.length > 0 || moreImgSet.has(cleanThumb)) {
       cleanThumb = '';
     }
-    // Also remove any image from Photo that is already placed in More blocks (unless it's a numbered lifestyle shot) or is a legacy -thumb cutout
-    cleanImages = cleanImages.filter((img) => {
-      const isNumberedLifestyle = /-\d{2}(-[a-f0-9]+)?\.(jpg|jpeg|png|webp)$/i.test(img) && !img.includes('-block');
-      if (moreImgSet.has(img) && !isNumberedLifestyle) return false;
-      if (cleanImages.length > 1 && /-thumb(-[a-f0-9]+)?(\.[a-z0-9]+)?$/i.test(img)) return false;
-      return true;
-    });
+    // If an exact image in Photo is already in More blocks (e.g. cutout placed in More), omit it from Photo as long as Photo has other lifestyle shots
+    if (cleanImages.length > 1 && moreImgSet.size > 0) {
+      const filtered = cleanImages.filter((img) => !moreImgSet.has(img));
+      if (filtered.length > 0) {
+        cleanImages = filtered;
+      }
+    }
   }
 
   return {
