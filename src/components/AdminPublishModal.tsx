@@ -33,7 +33,7 @@ import {
 import { getHonorSlug } from '../lib/experienceData';
 import { savePortfolioToFirestore, deleteProjectFromFirestore } from '../lib/firebase';
 import { idbGet, idbSet } from '../lib/idbStorage';
-import { compressImageFile } from '../lib/imageCompressor';
+import { compressImageFile, optimizeExistingDataUrl } from '../lib/imageCompressor';
 import {
   X,
   Plus,
@@ -495,215 +495,372 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const blockFileInputRef = useRef<HTMLInputElement>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleExportData = async () => {
-    showToast('📦 현재 작업 내용을 백업 파일(custom-data.json)로 즉시 생성 중입니다...');
-
-    // 1. Merge currently open form edits into draft arrays so nothing on screen is missed
-    let exportProjects = [...draftProjects];
-    let exportExperiences = [...draftExperiences];
-    const activeTitle = title.trim();
-    const activeSlug = (
-      editingSlug ||
-      slug.trim() ||
-      activeTitle.toLowerCase().replace(/[^a-z0-9가-힣\s-]/g, '').trim().replace(/\s+/g, '-')
-    ).trim();
-
-    if (activeSlug || activeTitle || thumbnail || detailImages.length > 0 || processImages.length > 0) {
-      const targetSlug = activeSlug || `project-${Date.now()}`;
-      const syncedContent =
-        moreBlocks.length > 0
-          ? moreBlocks
-              .map((b) => `${b.title ? `### ${b.title}\n` : ''}${b.description || ''}`.trim())
-              .filter(Boolean)
-              .join('\n\n')
-          : content;
-
-      const cleanedSpecs = customSpecs
-        .filter((s) => s.label.trim() !== '')
-        .map((s) => ({ label: s.label.trim(), value: s.value }));
-
-      const findSpecVal = (lbl: string, fallback: string) => {
-        const found = cleanedSpecs.find((s) => s.label.toLowerCase() === lbl.toLowerCase());
-        return found ? found.value : fallback;
-      };
-
-      const currentData: WorkProject = {
-        title: activeTitle || 'Untitled',
-        slug: targetSlug,
-        date: date || '2026',
-        brand: findSpecVal('brand', brand),
-        processScope: findSpecVal('process scope', processScope),
-        customSpecs: cleanedSpecs,
-        thumbnail: thumbnail || '',
-        images: detailImages,
-        processImages: processImages,
-        contribution: {
-          phases: contributionPhases.filter((ph) => ph.label.trim() !== ''),
-        },
-        moreBlocks: moreBlocks,
-        materials: findSpecVal('materials', materials),
-        dimensions: findSpecVal('dimensions', dimensions),
-        externalUrl: externalUrl || undefined,
-        order: Number(order) || (exportProjects.length + 1),
-        content: syncedContent || content || '프로젝트 상세 내용입니다.',
-      };
-
-      const isExp =
-        Number(order) >= 100 ||
-        isExperienceSlug(targetSlug) ||
-        exportExperiences.some((e) => e.slug === targetSlug);
-
-      if (isExp) {
-        let found = false;
-        exportExperiences = exportExperiences.map((e) => {
-          if (e.slug === targetSlug) {
-            found = true;
-            return { ...e, ...currentData };
-          }
-          return e;
-        });
-        if (!found) exportExperiences.push(currentData);
-      } else {
-        let found = false;
-        exportProjects = exportProjects.map((p) => {
-          if (p.slug === targetSlug) {
-            found = true;
-            return { ...p, ...currentData };
-          }
-          return p;
-        });
-        if (!found) exportProjects.push(currentData);
-        exportProjects.sort((a, b) => (a.order || 99) - (b.order || 99));
-      }
-
-      setDraftProjects(exportProjects);
-      setDraftExperiences(exportExperiences);
-      setProjectsList(exportProjects);
-      saveAllProjectsBatch(exportProjects, exportExperiences, true);
-      onBatchUpdated?.(exportProjects, exportExperiences);
-    }
-
-    // Ensure any dynamically generated image path (-recovered-, -block) is embedded as base64 for 100% standalone GitHub upload
-    const embedDynamicPath = async (imgUrl: string): Promise<string> => {
-      if (!imgUrl || imgUrl.startsWith('data:') || imgUrl.startsWith('http')) return imgUrl;
-      if (imgUrl.includes('-recovered-') || imgUrl.includes('-block')) {
-        try {
-          const res = await fetch(imgUrl);
-          if (res.ok) {
-            const blob = await res.blob();
-            return await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve((reader.result as string) || imgUrl);
-              reader.onerror = () => resolve(imgUrl);
-              reader.readAsDataURL(blob);
-            });
-          }
-        } catch {}
-      }
-      return imgUrl;
-    };
-
-    const standaloneProjects = await Promise.all(
-      exportProjects.map(async (p) => ({
-        ...p,
-        thumbnail: await embedDynamicPath(p.thumbnail),
-        images: await Promise.all((p.images || []).map(embedDynamicPath)),
-        processImages: await Promise.all((p.processImages || []).map(embedDynamicPath)),
-        moreBlocks: p.moreBlocks
-          ? await Promise.all(
-              p.moreBlocks.map(async (b) => ({
-                ...b,
-                images: await Promise.all((b.images || []).map(embedDynamicPath)),
-              }))
-            )
-          : undefined,
-      }))
-    );
-
-    const nowIso = new Date().toISOString();
-    const data = {
-      about: aboutForm || getAboutData(),
-      resume: resumeForm || getResumeData(),
-      projects: standaloneProjects,
-      experiences: exportExperiences,
-      updatedAt: nowIso,
-      exportedAt: nowIso,
-    };
-
-    // 2. Immediately trigger file download in browser (< 0.2s, zero waiting on server)
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const triggerJsonDownload = (filename: string, obj: any) => {
+    const jsonStr = JSON.stringify(obj, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `custom-data.json`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    // 3. Also sync to server & Firestore in background so live web stays in sync
-    fetch('/api/publish', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).catch(() => {});
-
-    showToast('✅ 최신 작업분 전체가 포함된 custom-data.json이 즉시 다운로드되었습니다! 깃허브 src/content/custom-data.json에 바로 업로드하시면 됩니다.');
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return blob.size;
   };
 
-  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const parsed = JSON.parse(event.target?.result as string);
+  const countTotalEmbeddedImages = (projs: WorkProject[], exps: WorkProject[]): number => {
+    let count = 0;
+    const checkUrl = (u?: string) => {
+      if (!u) return;
+      if (u.startsWith('data:image') || u.includes('-recovered-') || u.includes('-block')) {
+        count++;
+      }
+    };
+    for (const item of [...projs, ...exps]) {
+      checkUrl(item.thumbnail);
+      (item.images || []).forEach(checkUrl);
+      if (Array.isArray(item.moreBlocks) && item.moreBlocks.length > 0) {
+        item.moreBlocks.forEach((b) => (b.images || []).forEach(checkUrl));
+      } else {
+        (item.processImages || []).forEach(checkUrl);
+      }
+    }
+    return Math.max(1, count);
+  };
 
-          // 1. Send to server first so that base64 images are automatically extracted to static .jpg files
-          let activeData = parsed;
+  const optimizeProjectItem = async (
+    p: WorkProject,
+    maxBase64PerImage = 160000
+  ): Promise<WorkProject> => {
+    const embedAndOptimize = async (imgUrl: string): Promise<string> => {
+      if (!imgUrl) return imgUrl;
+      let resolved = imgUrl;
+      if (!resolved.startsWith('data:') && !resolved.startsWith('http')) {
+        if (resolved.includes('-recovered-') || resolved.includes('-block')) {
           try {
-            const res = await fetch('/api/publish', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(parsed),
-            });
-            const result = await res.json();
-            if (result && result.data) {
-              activeData = result.data;
+            const res = await fetch(resolved);
+            if (res.ok) {
+              const blob = await res.blob();
+              resolved = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve((reader.result as string) || imgUrl);
+                reader.onerror = () => resolve(imgUrl);
+                reader.readAsDataURL(blob);
+              });
             }
-          } catch (syncErr) {
-            console.warn('Server sync error during import:', syncErr);
-          }
-
-          if (activeData.about) {
-            saveAboutData(activeData.about);
-            onAboutUpdated(activeData.about);
-            setAboutForm(activeData.about);
-          }
-          if (activeData.resume) {
-            saveResumeData(activeData.resume);
-            onResumeUpdated(activeData.resume);
-            setResumeForm(activeData.resume);
-          }
-          if (activeData.projects && Array.isArray(activeData.projects)) {
-            activeData.projects.forEach((proj: WorkProject) => saveCustomProject(proj));
-            const all = getAllProjects();
-            setProjectsList(all);
-            setDraftProjects(all);
-            if (all[0]) {
-              onProjectAdded(all[0]);
-            }
-          }
-          if (activeData.experiences && Array.isArray(activeData.experiences)) {
-            setDraftExperiences(activeData.experiences);
-          }
-
-          alert('데이터를 성공적으로 불러왔습니다! 고화질 사진들이 실제 이미지 파일로 최적화되어 클라우드(Firestore)에 안전하게 영구 동기화되었습니다.');
-        } catch {
-          alert('올바르지 않은 백업 파일 형식입니다.');
+          } catch {}
         }
+      }
+      if (resolved.startsWith('data:image')) {
+        return await optimizeExistingDataUrl(resolved, 1800, maxBase64PerImage);
+      }
+      return resolved;
+    };
+
+    const optThumb = await embedAndOptimize(p.thumbnail);
+    const optImages = await Promise.all((p.images || []).map(embedAndOptimize));
+    const optBlocks = p.moreBlocks
+      ? await Promise.all(
+          p.moreBlocks.map(async (b) => ({
+            ...b,
+            images: await Promise.all((b.images || []).map(embedAndOptimize)),
+          }))
+        )
+      : undefined;
+
+    // Avoid storing duplicate Base64 strings in processImages when moreBlocks already holds the process photos
+    const hasBlockImages =
+      Array.isArray(optBlocks) && optBlocks.some((b) => Array.isArray(b.images) && b.images.length > 0);
+    const rawProc = Array.isArray(p.processImages) ? p.processImages : [];
+    const filteredProc = hasBlockImages
+      ? rawProc.filter((img) => img && !img.startsWith('data:'))
+      : rawProc;
+    const optProcessImages = await Promise.all(filteredProc.map(embedAndOptimize));
+
+    return {
+      ...p,
+      thumbnail: optThumb,
+      images: optImages,
+      processImages: optProcessImages,
+      moreBlocks: optBlocks,
+    };
+  };
+
+  const handleExportData = async () => {
+    setIsCompressing(true);
+    showToast('⚡ 고화질 유지 스마트 압축 및 GitHub 25MB 제한 통과용 백업 생성 중...');
+
+    try {
+      // 1. Merge currently open form edits into draft arrays so nothing on screen is missed
+      let exportProjects = [...draftProjects];
+      let exportExperiences = [...draftExperiences];
+      const activeTitle = title.trim();
+      const activeSlug = (
+        editingSlug ||
+        slug.trim() ||
+        activeTitle.toLowerCase().replace(/[^a-z0-9가-힣\s-]/g, '').trim().replace(/\s+/g, '-')
+      ).trim();
+
+      if (activeSlug || activeTitle || thumbnail || detailImages.length > 0 || processImages.length > 0) {
+        const targetSlug = activeSlug || `project-${Date.now()}`;
+        const syncedContent =
+          moreBlocks.length > 0
+            ? moreBlocks
+                .map((b) => `${b.title ? `### ${b.title}\n` : ''}${b.description || ''}`.trim())
+                .filter(Boolean)
+                .join('\n\n')
+            : content;
+
+        const cleanedSpecs = customSpecs
+          .filter((s) => s.label.trim() !== '')
+          .map((s) => ({ label: s.label.trim(), value: s.value }));
+
+        const findSpecVal = (lbl: string, fallback: string) => {
+          const found = cleanedSpecs.find((s) => s.label.toLowerCase() === lbl.toLowerCase());
+          return found ? found.value : fallback;
+        };
+
+        const currentData: WorkProject = {
+          title: activeTitle || 'Untitled',
+          slug: targetSlug,
+          date: date || '2026',
+          brand: findSpecVal('brand', brand),
+          processScope: findSpecVal('process scope', processScope),
+          customSpecs: cleanedSpecs,
+          thumbnail: thumbnail || '',
+          images: detailImages,
+          processImages: processImages,
+          contribution: {
+            phases: contributionPhases.filter((ph) => ph.label.trim() !== ''),
+          },
+          moreBlocks: moreBlocks,
+          materials: findSpecVal('materials', materials),
+          dimensions: findSpecVal('dimensions', dimensions),
+          externalUrl: externalUrl || undefined,
+          order: Number(order) || (exportProjects.length + 1),
+          content: syncedContent || content || '프로젝트 상세 내용입니다.',
+        };
+
+        const isExp =
+          Number(order) >= 100 ||
+          isExperienceSlug(targetSlug) ||
+          exportExperiences.some((e) => e.slug === targetSlug);
+
+        if (isExp) {
+          let found = false;
+          exportExperiences = exportExperiences.map((e) => {
+            if (e.slug === targetSlug) {
+              found = true;
+              return { ...e, ...currentData };
+            }
+            return e;
+          });
+          if (!found) exportExperiences.push(currentData);
+        } else {
+          let found = false;
+          exportProjects = exportProjects.map((p) => {
+            if (p.slug === targetSlug) {
+              found = true;
+              return { ...p, ...currentData };
+            }
+            return p;
+          });
+          if (!found) exportProjects.push(currentData);
+          exportProjects.sort((a, b) => (a.order || 99) - (b.order || 99));
+        }
+      }
+
+      // 2. Calculate dynamic per-image budget so total custom-data.json is ALWAYS < 18.5MB in a single file!
+      const imgCount = countTotalEmbeddedImages(exportProjects, exportExperiences);
+      const dynamicBudget = Math.max(
+        55000,
+        Math.min(165000, Math.floor((17.5 * 1024 * 1024) / imgCount))
+      );
+
+      const standaloneProjects = await Promise.all(
+        exportProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
+      );
+      const standaloneExperiences = await Promise.all(
+        exportExperiences.map((e) => optimizeProjectItem(e, dynamicBudget))
+      );
+
+      // Update active editor state & IndexedDB with the slimmed-down images so future saves stay fast and compact
+      setDraftProjects(standaloneProjects);
+      setDraftExperiences(standaloneExperiences);
+      setProjectsList(standaloneProjects);
+      saveAllProjectsBatch(standaloneProjects, standaloneExperiences, true);
+      onBatchUpdated?.(standaloneProjects, standaloneExperiences);
+
+      if (editingSlug) {
+        const activeEdited =
+          standaloneProjects.find((p) => p.slug === editingSlug) ||
+          standaloneExperiences.find((e) => e.slug === editingSlug);
+        if (activeEdited) {
+          setThumbnail(activeEdited.thumbnail || '');
+          setDetailImages(activeEdited.images || []);
+          setProcessImages(activeEdited.processImages || []);
+          if (activeEdited.moreBlocks) {
+            setMoreBlocks(activeEdited.moreBlocks);
+          }
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+      const fullData = {
+        about: aboutForm || getAboutData(),
+        resume: resumeForm || getResumeData(),
+        projects: standaloneProjects,
+        experiences: standaloneExperiences,
+        updatedAt: nowIso,
+        exportedAt: nowIso,
       };
-      reader.readAsText(file);
+
+      const fullJsonStr = JSON.stringify(fullData, null, 2);
+      const totalBytes = new Blob([fullJsonStr]).size;
+      const totalMb = (totalBytes / (1024 * 1024)).toFixed(1);
+
+      triggerJsonDownload('custom-data.json', fullData);
+      showToast(
+        `✅ 용량 최적화 완료! (총 ${totalMb}MB — GitHub 25MB 제한 통과) 다운로드된 custom-data.json을 깃허브 src/content/ 폴더에 업로드하세요.`
+      );
+
+      // 3. Also sync full data to server in background
+      fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: fullJsonStr,
+      }).catch(() => {});
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
+  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    setIsCompressing(true);
+    showToast('⚡ 홈페이지 백업 파일을 불러와서 25MB 이하 안전 규격으로 자동 다이어트 중입니다...');
+    try {
+      const files = Array.from(fileList);
+      let originalTotalBytes = 0;
+      const parsedList: any[] = [];
+
+      for (const file of files) {
+        originalTotalBytes += file.size;
+        const text = await file.text();
+        parsedList.push(JSON.parse(text));
+      }
+
+      const mergedProjectsMap = new Map<string, WorkProject>();
+      const mergedExpMap = new Map<string, WorkProject>();
+      let mergedAbout: AboutData | undefined;
+      let mergedResume: ResumeData | undefined;
+
+      for (const parsed of parsedList) {
+        if (parsed.about) mergedAbout = parsed.about;
+        if (parsed.resume) mergedResume = parsed.resume;
+        if (Array.isArray(parsed.projects)) {
+          for (const p of parsed.projects) {
+            if (p && p.slug) mergedProjectsMap.set(p.slug, p);
+          }
+        }
+        if (Array.isArray(parsed.experiences)) {
+          for (const ex of parsed.experiences) {
+            if (ex && ex.slug) mergedExpMap.set(ex.slug, ex);
+          }
+        }
+      }
+
+      const rawProjects = Array.from(mergedProjectsMap.values()).sort(
+        (a, b) => (a.order || 99) - (b.order || 99)
+      );
+      const rawExperiences = Array.from(mergedExpMap.values());
+
+      // Calculate dynamic per-image budget so the output custom-data.json is guaranteed < 18.5MB!
+      const imgCount = countTotalEmbeddedImages(rawProjects, rawExperiences);
+      const dynamicBudget = Math.max(
+        55000,
+        Math.min(165000, Math.floor((17.5 * 1024 * 1024) / imgCount))
+      );
+
+      // Automatically optimize any oversized Base64 images on import
+      const optProjects = await Promise.all(
+        rawProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
+      );
+      const optExperiences = await Promise.all(
+        rawExperiences.map((ex) => optimizeProjectItem(ex, dynamicBudget))
+      );
+
+      const nowIso = new Date().toISOString();
+      const combinedPayload = {
+        about: mergedAbout || aboutForm || getAboutData(),
+        resume: mergedResume || resumeForm || getResumeData(),
+        projects: optProjects,
+        experiences: optExperiences,
+        updatedAt: nowIso,
+        exportedAt: nowIso,
+      };
+
+      // Immediately download the slimmed-down (<18.5MB) custom-data.json for GitHub upload!
+      const newBytes = triggerJsonDownload('custom-data.json', combinedPayload);
+      const oldMb = (originalTotalBytes / (1024 * 1024)).toFixed(1);
+      const newMb = (newBytes / (1024 * 1024)).toFixed(1);
+
+      let activeData: any = combinedPayload;
+      try {
+        const res = await fetch('/api/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(combinedPayload),
+        });
+        const result = await res.json();
+        if (result && result.data) {
+          activeData = result.data;
+        }
+      } catch (syncErr) {
+        console.warn('Server sync error during import:', syncErr);
+      }
+
+      if (activeData.about) {
+        saveAboutData(activeData.about);
+        onAboutUpdated(activeData.about);
+        setAboutForm(activeData.about);
+      }
+      if (activeData.resume) {
+        saveResumeData(activeData.resume);
+        onResumeUpdated(activeData.resume);
+        setResumeForm(activeData.resume);
+      }
+      if (Array.isArray(activeData.projects) && activeData.projects.length > 0) {
+        saveAllProjectsBatch(
+          activeData.projects,
+          Array.isArray(activeData.experiences) ? activeData.experiences : draftExperiences
+        );
+        setProjectsList(activeData.projects);
+        setDraftProjects(activeData.projects);
+        onBatchUpdated?.(
+          activeData.projects,
+          Array.isArray(activeData.experiences) ? activeData.experiences : draftExperiences
+        );
+        if (activeData.projects[0]) {
+          loadProjectIntoForm(activeData.projects[0]);
+          onProjectAdded(activeData.projects[0]);
+        }
+      }
+      if (Array.isArray(activeData.experiences) && activeData.experiences.length > 0) {
+        setDraftExperiences(activeData.experiences);
+      }
+
+      showToast(
+        `✅ 복원 및 용량 압축 완료! (${oldMb}MB → ${newMb}MB) 방금 자동 다운로드된 새 custom-data.json을 깃허브 src/content/에 업로드하세요!`
+      );
+    } catch {
+      alert('올바르지 않은 백업 파일 형식입니다.');
+    } finally {
+      setIsCompressing(false);
+      e.target.value = '';
     }
   };
 
@@ -759,7 +916,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       const results: string[] = [];
       for (const file of files) {
         try {
-          const comp = await compressImageFile(file, 2560, 0.92);
+          const comp = await compressImageFile(file, 1920, 0.84);
           results.push(comp);
         } catch {
           const fallback = await new Promise<string>((res) => {
@@ -1692,32 +1849,35 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 </button>
               </div>
             )}
+            <input
+              type="file"
+              accept=".json"
+              multiple
+              ref={importFileInputRef}
+              onChange={handleImportData}
+              className="hidden"
+            />
             {isAuthenticated && (
               <div className="flex items-center gap-1.5">
-                <input
-                  type="file"
-                  accept=".json"
-                  ref={importFileInputRef}
-                  onChange={handleImportData}
-                  className="hidden"
-                />
                 <button
                   type="button"
+                  disabled={isCompressing}
                   onClick={handleExportData}
-                  className="text-[11px] border border-[rgba(0,0,0,0.2)] bg-neutral-50 hover:bg-neutral-100 text-black px-2 py-1 flex items-center gap-1 cursor-pointer transition-colors"
-                  title="전체 데이터 및 사진을 내 컴퓨터로 백업 다운로드"
+                  className="text-[11px] border border-black bg-black text-white hover:bg-neutral-800 px-2.5 py-1 flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-60"
+                  title="기존 사진까지 자동 용량 다이어트 후 GitHub 25MB 이하 안전 규격으로 다운로드"
                 >
-                  <Download size={11} />
-                  <span>백업 저장</span>
+                  {isCompressing ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                  <span>{isCompressing ? '용량 최적화 중...' : '백업 저장 (25MB 이하 자동최적화)'}</span>
                 </button>
                 <button
                   type="button"
+                  disabled={isCompressing}
                   onClick={() => importFileInputRef.current?.click()}
-                  className="text-[11px] border border-[rgba(0,0,0,0.2)] bg-neutral-50 hover:bg-neutral-100 text-black px-2 py-1 flex items-center gap-1 cursor-pointer transition-colors"
-                  title="내 컴퓨터의 백업 파일(JSON)에서 복원"
+                  className="text-[11px] border border-black bg-neutral-100 hover:bg-neutral-200 text-black px-2.5 py-1 flex items-center gap-1 cursor-pointer transition-colors font-medium disabled:opacity-60"
+                  title="홈페이지에서 받은 25MB 초과 custom-data.json을 불러오면 25MB 이하로 즉시 압축되어 자동 다운로드됩니다"
                 >
-                  <Upload size={11} />
-                  <span>백업 불러오기</span>
+                  {isCompressing ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                  <span>백업 불러오기 (25MB 초과 파일 자동 변환)</span>
                 </button>
               </div>
             )}
@@ -1744,8 +1904,35 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
         <div className="flex-1 overflow-y-auto p-5 text-[13px]">
           {!isAuthenticated ? (
             /* Password Authentication Screen */
-            <form onSubmit={handleLogin} className="space-y-4 py-8">
-              <div className="text-center space-y-1">
+            <form onSubmit={handleLogin} className="space-y-5 py-6">
+              <div className="max-w-md mx-auto p-4 border border-black bg-[#FAF9F6] space-y-2.5">
+                <div className="font-medium text-black text-[13px]">
+                  💡 홈페이지에서 작업하고 받은 25MB 초과 <code className="font-mono bg-white px-1 border">custom-data.json</code> 변환하기
+                </div>
+                <div className="text-[11.5px] text-[rgba(0,0,0,0.65)] leading-relaxed">
+                  홈페이지에서 작업한 내용은 내 컴퓨터 <strong>다운로드(Downloads)</strong> 폴더의 <code className="font-mono">custom-data.json</code> 파일에 안전하게 들어있습니다. 아래 버튼을 눌러 그 파일을 선택하시면 <strong>작업 내용은 100% 그대로 유지한 채 용량만 25MB 이하로 즉시 압축된 새 <code className="font-mono">custom-data.json</code>이 자동 다운로드</strong>됩니다.
+                </div>
+                <button
+                  type="button"
+                  disabled={isCompressing}
+                  onClick={() => importFileInputRef.current?.click()}
+                  className="w-full bg-black text-white py-2.5 px-3 text-[12.5px] font-medium hover:bg-neutral-800 transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-60"
+                >
+                  {isCompressing ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>사진 화질 유지 & 25MB 이하로 자동 압축 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={14} />
+                      <span>내 컴퓨터의 custom-data.json 불러와서 25MB 이하로 즉시 변환하기</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="text-center space-y-1 pt-2 border-t border-[rgba(0,0,0,0.1)]">
                 <div className="font-normal text-black text-[14px]">본인 인증 (Admin)</div>
                 <div className="text-[12px] text-[rgba(0,0,0,0.5)]">
                   사이트 소유자(leehyejun) 전용 비밀번호를 입력하세요.
@@ -3600,34 +3787,60 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
 
         {/* Discreet Data Sync & Transfer Bar (내보내기 / 불러오기) */}
         {isAuthenticated && (
-          <div className="px-5 py-2.5 bg-neutral-50 border-t border-[rgba(0,0,0,0.1)] flex flex-wrap items-center justify-between text-[11px] text-[rgba(0,0,0,0.6)]">
-            <div className="flex items-center gap-1.5">
-              <span>💡 깃허브 연동 또는 전체 백업:</span>
+          <div className="px-5 py-2.5 bg-neutral-50 border-t border-[rgba(0,0,0,0.1)] flex flex-col gap-1.5 text-[11px] text-[rgba(0,0,0,0.6)]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span>💡 깃허브 연동 또는 전체 백업:</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => importFileInputRef.current?.click()}
+                  className="underline hover:text-black cursor-pointer font-medium"
+                >
+                  [데이터 불러오기 (25MB 초과 자동변환)]
+                </button>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={handleExportData}
+                  className="underline hover:text-black cursor-pointer font-medium text-black font-semibold"
+                  title="다운로드된 custom-data.json을 깃허브 저장소에 업로드하시면 사이트에 즉시 반영됩니다"
+                >
+                  [깃허브 연동용 custom-data.json 백업 다운로드]
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept=".json"
-                ref={importFileInputRef}
-                onChange={handleImportData}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => importFileInputRef.current?.click()}
-                className="underline hover:text-black cursor-pointer font-medium"
-              >
-                [데이터 불러오기 (Import)]
-              </button>
-              <span>·</span>
-              <button
-                type="button"
-                onClick={handleExportData}
-                className="underline hover:text-black cursor-pointer font-medium text-black font-semibold"
-                title="다운로드된 custom-data.json을 깃허브 저장소에 업로드하시면 사이트에 즉시 반영됩니다"
-              >
-                [깃허브 연동용 custom-data.json 백업 다운로드]
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[rgba(0,0,0,0.06)] text-[10.5px]">
+              <span>🛠️ 실제 홈페이지에도 25MB 자동 다이어트 기능 심기 (최초 1회 깃허브 업로드):</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href="/api/upgrade-code/imageCompressor.ts"
+                  download="imageCompressor.ts"
+                  className="underline hover:text-black text-black font-mono"
+                  title="깃허브 src/lib/ 폴더에 업로드"
+                >
+                  1. imageCompressor.ts (src/lib/)
+                </a>
+                <span>·</span>
+                <a
+                  href="/api/upgrade-code/ImageCropperModal.tsx"
+                  download="ImageCropperModal.tsx"
+                  className="underline hover:text-black text-black font-mono"
+                  title="깃허브 src/components/ 폴더에 업로드"
+                >
+                  2. ImageCropperModal.tsx (src/components/)
+                </a>
+                <span>·</span>
+                <a
+                  href="/api/upgrade-code/AdminPublishModal.tsx"
+                  download="AdminPublishModal.tsx"
+                  className="underline hover:text-black text-black font-mono"
+                  title="깃허브 src/components/ 폴더에 업로드"
+                >
+                  3. AdminPublishModal.tsx (src/components/)
+                </a>
+              </div>
             </div>
           </div>
         )}

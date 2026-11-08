@@ -11,6 +11,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { AspectRatioMode, ASPECT_RATIO_PRESETS, AspectRatioOption } from '../lib/imageCrop';
+import { canvasToOptimizedDataUrl } from '../lib/imageCompressor';
 
 export type AspectRatioType = AspectRatioMode;
 
@@ -494,8 +495,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       const sw = Math.min(transCanvas.width - sx, Math.round(crop.width * scaleX));
       const sh = Math.min(transCanvas.height - sy, Math.round(crop.height * scaleY));
 
-      // 3. Retina 2560px limit for razor-sharp product details
-      const maxDim = 2560;
+      // 3. Retina 1920px limit for razor-sharp product details with compact GitHub-safe file size
+      const maxDim = 1920;
       let outW = sw;
       let outH = sh;
 
@@ -527,8 +528,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
 
       ctx.drawImage(transCanvas, sx, sy, sw, sh, 0, 0, outW, outH);
 
-      // High-quality JPEG (0.92) for pristine gallery quality
-      const croppedDataUrl = outCanvas.toDataURL('image/jpeg', 0.92);
+      // High-efficiency WebP/JPEG (~80KB–150KB) for pristine gallery quality & <25MB GitHub safety
+      const croppedDataUrl = canvasToOptimizedDataUrl(outCanvas, 0.84);
       onCropComplete(croppedDataUrl);
     } catch (err) {
       console.error('Failed to crop image:', err);
