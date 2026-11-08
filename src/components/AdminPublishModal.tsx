@@ -28,6 +28,7 @@ import {
   saveExperienceProject,
   saveAllProjectsBatch,
   isExperienceSlug,
+  cleanProjectData,
   BUNDLED_VERSION,
 } from '../lib/content';
 import { getHonorSlug } from '../lib/experienceData';
@@ -191,7 +192,8 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   const [isSaved, setIsSaved] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
-  const loadProjectIntoForm = (proj: WorkProject) => {
+  const loadProjectIntoForm = (rawProj: WorkProject) => {
+    const proj = cleanProjectData(rawProj);
     isInitialLoadRef.current = true;
     setEditingSlug(proj.slug);
     setTitle(proj.title || '');
@@ -227,10 +229,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     setExternalUrl(proj.externalUrl || '');
     setContent(proj.content || '');
     setThumbnail(proj.thumbnail || '');
-    const cleanImages = (proj.images || []).filter(
-      (img) => img && !img.includes('display-system-1.jpg') && !img.includes('display-system-2.jpg')
-    );
-    setDetailImages(cleanImages);
+    setDetailImages(proj.images || []);
     setProcessImages(Array.isArray(proj.processImages) ? proj.processImages.filter(Boolean) : []);
 
     // Load Contribution phases
@@ -261,7 +260,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     if (isAuthenticated) {
       let cancelled = false;
       async function initAdminDrafts() {
-        let pList = getAllProjects();
+        let pList = getAllProjects().map(cleanProjectData);
         let expList = getExperienceProjects();
         try {
           const [idbProjs, idbExps, idbMeta] = await Promise.all([
@@ -269,9 +268,10 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
             idbGet<WorkProject[]>('leehyejun_custom_experiences'),
             idbGet<{ updatedAt?: string; bundledVersion?: string }>('leehyejun_custom_meta'),
           ]);
-          const isCurrentVersion = idbMeta?.bundledVersion === BUNDLED_VERSION;
+          const isCurrentVersion =
+            !idbMeta?.bundledVersion || idbMeta.bundledVersion === BUNDLED_VERSION;
           if (isCurrentVersion && Array.isArray(idbProjs) && idbProjs.length > 0) {
-            pList = idbProjs;
+            pList = idbProjs.map(cleanProjectData);
           }
           if (isCurrentVersion && Array.isArray(idbExps) && idbExps.length > 0) {
             expList = idbExps;
@@ -517,7 +517,8 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         count++;
       }
     };
-    for (const item of [...projs, ...exps]) {
+    const cleanedProjs = (projs || []).map(cleanProjectData);
+    for (const item of [...cleanedProjs, ...(exps || [])]) {
       checkUrl(item.thumbnail);
       (item.images || []).forEach(checkUrl);
       if (Array.isArray(item.moreBlocks) && item.moreBlocks.length > 0) {
@@ -530,9 +531,13 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
   };
 
   const optimizeProjectItem = async (
-    p: WorkProject,
+    rawProj: WorkProject,
     maxBase64PerImage = 160000
   ): Promise<WorkProject> => {
+    const isExp =
+      isExperienceSlug(rawProj.slug) || (typeof rawProj.order === 'number' && rawProj.order >= 100);
+    const p = isExp ? rawProj : cleanProjectData(rawProj);
+
     const embedAndOptimize = async (imgUrl: string): Promise<string> => {
       if (!imgUrl) return imgUrl;
       let resolved = imgUrl;
@@ -578,13 +583,14 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       : rawProc;
     const optProcessImages = await Promise.all(filteredProc.map(embedAndOptimize));
 
-    return {
+    const result: WorkProject = {
       ...p,
       thumbnail: optThumb,
       images: optImages,
       processImages: optProcessImages,
       moreBlocks: optBlocks,
     };
+    return isExp ? result : cleanProjectData(result);
   };
 
   const handleExportData = async () => {
@@ -2815,137 +2821,7 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               </div>
 
               {/* ============================================================== */}
-              {/* 1. Photo 탭 대표 촬영컷 (thumbnail — 드롭존 지원 + 개별 자르기 옵션) */}
-              {/* ============================================================== */}
-              <div
-                onDragEnter={(e) => {
-                  if (hasDraggedFiles(e)) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsFileDragOverThumb(true);
-                  }
-                }}
-                onDragOver={(e) => {
-                  if (hasDraggedFiles(e)) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.dataTransfer.dropEffect = 'copy';
-                    if (!isFileDragOverThumb) setIsFileDragOverThumb(true);
-                  }
-                }}
-                onDragLeave={(e) => {
-                  if (hasDraggedFiles(e) && !e.currentTarget.contains(e.relatedTarget as Node)) {
-                    setIsFileDragOverThumb(false);
-                  }
-                }}
-                onDrop={handleThumbnailFileDrop}
-                className={`p-3.5 border transition-colors space-y-2.5 ${
-                  isFileDragOverThumb
-                    ? 'border-2 border-dashed border-black bg-neutral-100'
-                    : 'border-[rgba(0,0,0,0.15)] bg-[#FAFAFA]'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <span className="font-normal text-black text-[12.5px]">
-                    🖼️ <strong>Photo 대표 촬영컷</strong> (파일을 끌어다 놓거나 선택하면 즉시 첨부됩니다)
-                  </span>
-                  {thumbnail && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCropperState({
-                            isOpen: true,
-                            type: 'thumbnail',
-                            imageSrc: thumbnail,
-                            title: 'Photo 대표 촬영컷 자르기 & 비율 조절',
-                            subtitle: '가운데 Photo 탭 최상단 대표 촬영 이미지',
-                          });
-                        }}
-                        className="text-[11px] border border-[rgba(0,0,0,0.25)] bg-white px-2 py-0.5 hover:bg-neutral-100 flex items-center gap-1 cursor-pointer"
-                        title="대표사진 비율 조절 및 자르기"
-                      >
-                        <Crop size={11} />
-                        <span>자르기 / 비율 조정</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setThumbnail('')}
-                        className="text-[11px] text-red-600 hover:underline cursor-pointer"
-                      >
-                        대표사진 삭제
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-start gap-3">
-                  {thumbnail ? (
-                    <div className="relative group w-24 h-32 border border-[rgba(0,0,0,0.2)] overflow-hidden shrink-0 bg-white">
-                      <img src={thumbnail} alt="대표사진" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCropperState({
-                            isOpen: true,
-                            type: 'thumbnail',
-                            imageSrc: thumbnail,
-                            title: 'Photo 대표 촬영컷 자르기 & 비율 조절',
-                            subtitle: '가운데 Photo 탭 최상단 대표 촬영 이미지',
-                          });
-                        }}
-                        className="absolute inset-0 bg-black/60 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10.5px]"
-                        title="대표사진 크롭 / 비율 조정"
-                      >
-                        <Crop size={16} />
-                        <span className="mt-1">자르기</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => thumbnailFileInputRef.current?.click()}
-                      className="w-24 h-32 border border-dashed border-[rgba(0,0,0,0.3)] hover:border-black flex flex-col items-center justify-center text-center p-2 text-[10px] text-[rgba(0,0,0,0.5)] shrink-0 bg-white cursor-pointer transition-colors"
-                    >
-                      <ImageIcon size={20} />
-                      <span className="mt-1">클릭 또는 파일 드롭</span>
-                    </div>
-                  )}
-
-                  <div className="flex-1 space-y-2 w-full">
-                    <div
-                      onClick={() => thumbnailFileInputRef.current?.click()}
-                      className="border border-dashed border-[rgba(0,0,0,0.25)] hover:border-black bg-white p-2.5 flex flex-wrap items-center justify-between gap-2 cursor-pointer transition-colors"
-                    >
-                      <input
-                        type="file"
-                        accept="image/*"
-                        ref={thumbnailFileInputRef}
-                        onChange={handleThumbnailUpload}
-                        className="hidden"
-                      />
-                      <span className="text-[11.5px] text-neutral-700 flex items-center gap-1.5">
-                        {isCompressing ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                        <span>
-                          <strong>여기에 사진 파일을 끌어다 놓거나</strong> 클릭하여 선택 (즉시 첨부)
-                        </span>
-                      </span>
-                      <span className="text-[10.5px] text-neutral-400 font-mono">DRAG & DROP</span>
-                    </div>
-
-                    <div className="text-[11px] text-[rgba(0,0,0,0.4)]">또는 이미지 웹 URL 직접 입력:</div>
-                    <input
-                      type="text"
-                      value={thumbnail.startsWith('data:') ? '' : thumbnail}
-                      onChange={(e) => setThumbnail(e.target.value)}
-                      placeholder="https://... 또는 /images/work/photo.jpg"
-                      className="w-full border border-[rgba(0,0,0,0.25)] px-2.5 py-1 text-[12px] bg-white focus:outline-none focus:border-black"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* ============================================================== */}
-              {/* 2. Photo 탭 최종 촬영 이미지 목록 (파일 드롭존 + 드래그 정렬)    */}
+              {/* 1. Photo 탭 최종 촬영 이미지 목록 (파일 드롭존 + 드래그 정렬)    */}
               {/* ============================================================== */}
               <div
                 onDragEnter={(e) => {
@@ -3143,17 +3019,25 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                                 >
                                   <Crop size={11} />
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setThumbnail(imgSrc);
-                                  }}
-                                  className="text-[9.5px] bg-white text-black px-1.5 py-0.5 font-normal hover:bg-neutral-200 cursor-pointer transition-colors shadow-xs"
-                                  title="이 사진을 대표 촬영컷으로 설정"
-                                >
-                                  대표로 지정
-                                </button>
+                                {idx > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setThumbnail('');
+                                      setDetailImages((prev) => {
+                                        const next = [...prev];
+                                        const [moved] = next.splice(idx, 1);
+                                        next.unshift(moved);
+                                        return next;
+                                      });
+                                    }}
+                                    className="text-[9.5px] bg-white text-black px-1.5 py-0.5 font-normal hover:bg-neutral-200 cursor-pointer transition-colors shadow-xs"
+                                    title="이 사진을 Photo 탭 #1 맨 앞으로 이동"
+                                  >
+                                    맨 앞으로
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -3812,24 +3696,33 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[rgba(0,0,0,0.06)] text-[10.5px]">
-              <span>🛠️ 실제 홈페이지에도 25MB 자동 다이어트 기능 심기 (최초 1회 깃허브 업로드):</span>
-              <div className="flex items-center gap-2">
+              <span>🛠️ 중복 이미지 & 과거 이력 충돌 방지 코드 다운로드 (깃허브 업로드용):</span>
+              <div className="flex flex-wrap items-center gap-2">
                 <a
-                  href="/api/upgrade-code/imageCompressor.ts"
-                  download="imageCompressor.ts"
+                  href="/api/upgrade-code/content.ts"
+                  download="content.ts"
                   className="underline hover:text-black text-black font-mono"
                   title="깃허브 src/lib/ 폴더에 업로드"
                 >
-                  1. imageCompressor.ts (src/lib/)
+                  1. content.ts (src/lib/)
                 </a>
                 <span>·</span>
                 <a
-                  href="/api/upgrade-code/ImageCropperModal.tsx"
-                  download="ImageCropperModal.tsx"
+                  href="/api/upgrade-code/WorkColumn.tsx"
+                  download="WorkColumn.tsx"
                   className="underline hover:text-black text-black font-mono"
                   title="깃허브 src/components/ 폴더에 업로드"
                 >
-                  2. ImageCropperModal.tsx (src/components/)
+                  2. WorkColumn.tsx (src/components/)
+                </a>
+                <span>·</span>
+                <a
+                  href="/api/upgrade-code/MoreColumn.tsx"
+                  download="MoreColumn.tsx"
+                  className="underline hover:text-black text-black font-mono"
+                  title="깃허브 src/components/ 폴더에 업로드"
+                >
+                  3. MoreColumn.tsx (src/components/)
                 </a>
                 <span>·</span>
                 <a
@@ -3838,7 +3731,16 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                   className="underline hover:text-black text-black font-mono"
                   title="깃허브 src/components/ 폴더에 업로드"
                 >
-                  3. AdminPublishModal.tsx (src/components/)
+                  4. AdminPublishModal.tsx (src/components/)
+                </a>
+                <span>·</span>
+                <a
+                  href="/api/upgrade-code/unpack-images.cjs"
+                  download="unpack-images.cjs"
+                  className="underline hover:text-black text-black font-mono"
+                  title="깃허브 scripts/ 폴더에 업로드"
+                >
+                  5. unpack-images.cjs (scripts/)
                 </a>
               </div>
             </div>

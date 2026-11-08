@@ -83,27 +83,42 @@ export function getDefaultContribution(project: WorkProject): Required<ProjectCo
 }
 
 export function buildEditorialBlocks(project: WorkProject): MoreProcessBlock[] {
-  if (Array.isArray(project.moreBlocks) && project.moreBlocks.length > 0) {
-    return project.moreBlocks.filter(
-      (b) => (Array.isArray(b.images) && b.images.length > 0) || Boolean(b.description?.trim())
-    );
-  }
+  const photoSet = new Set(
+    (project.images || []).filter(Boolean)
+  );
+  const numberedPhotoRegex = new RegExp(
+    `^/images/work/${(project.slug || '').replace(/[^a-zA-Z0-9_-]/g, '_')}-\\d{2}\\.(jpg|jpeg|png|webp)$`,
+    'i'
+  );
 
-  // Gather available images: prioritize processImages, then project images
-  const processImgs = Array.isArray(project.processImages)
-    ? project.processImages.filter(Boolean)
-    : [];
-  const mainImgs: string[] = [];
-  if (project.thumbnail) mainImgs.push(project.thumbnail);
-  if (Array.isArray(project.images)) {
-    for (const img of targetImages(project.images)) {
-      if (img && !mainImgs.includes(img)) {
-        mainImgs.push(img);
-      }
+  if (Array.isArray(project.moreBlocks) && project.moreBlocks.length > 0) {
+    const cleanedBlocks = project.moreBlocks
+      .map((b) => ({
+        ...b,
+        images: Array.isArray(b.images)
+          ? b.images.filter((img) => {
+              if (!img) return false;
+              // Strip numbered lifestyle shots that were auto-copied from Photo by legacy buildEditorialBlocks
+              if (photoSet.has(img) && numberedPhotoRegex.test(img)) {
+                return false;
+              }
+              return true;
+            })
+          : [],
+      }))
+      .filter(
+        (b) => (Array.isArray(b.images) && b.images.length > 0) || Boolean(b.description?.trim())
+      );
+
+    if (cleanedBlocks.length > 0) {
+      return cleanedBlocks;
     }
   }
 
-  const pool = processImgs.length > 0 ? [...processImgs, ...mainImgs] : mainImgs;
+  // Only use dedicated processImages for More blocks — NEVER copy Photo tab images (thumbnail or project.images)
+  const pool = Array.isArray(project.processImages)
+    ? project.processImages.filter((img) => Boolean(img) && !photoSet.has(img))
+    : [];
 
   // Parse markdown sections (`### Title` or paragraphs) from project.content preserving **bold** and - list formatting
   const rawContent = (project.content || '').trim();
@@ -378,7 +393,7 @@ export const MoreColumn: React.FC<MoreColumnProps> = ({
           {editorialBlocks.map((block, blockIdx) => {
             const images = block.images || [];
             const activeImgIdx = selectedThumbMap[blockIdx] ?? 0;
-            const currentMainImage = images[activeImgIdx] || images[0] || project.thumbnail;
+            const currentMainImage = images[activeImgIdx] || images[0] || '';
 
             return (
               <article key={block.id || blockIdx} className="space-y-4">

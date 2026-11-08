@@ -43,20 +43,46 @@ export const WorkColumn: React.FC<WorkColumnProps> = ({
     workProjects[0] ||
     null;
 
-  // Assemble deduplicated final shoot images (thumbnail + images)
+  // Assemble deduplicated final shoot images for the Photo column (never duplicating More block images or legacy furniture cutouts)
   const finalShootImages = React.useMemo(() => {
     if (!targetProject) return [];
-    const list: string[] = [];
-    if (targetProject.thumbnail) {
-      list.push(targetProject.thumbnail);
-    }
-    if (Array.isArray(targetProject.images)) {
-      for (const img of targetProject.images) {
-        if (img && !list.includes(img)) {
-          list.push(img);
+
+    const moreImgSet = new Set<string>();
+    if (Array.isArray(targetProject.moreBlocks)) {
+      for (const b of targetProject.moreBlocks) {
+        if (Array.isArray(b?.images)) {
+          for (const mImg of b.images) {
+            if (mImg) moreImgSet.add(mImg);
+          }
         }
       }
     }
+
+    const rawImages = Array.isArray(targetProject.images)
+      ? targetProject.images.filter(Boolean)
+      : [];
+    const isShowroom = targetProject.slug === 'mobile-display-system';
+    const list: string[] = [];
+
+    // Only prepend thumbnail if this is the Yeonhui Showroom exterior shot or if rawImages is completely empty
+    if (
+      targetProject.thumbnail &&
+      !moreImgSet.has(targetProject.thumbnail) &&
+      (isShowroom || rawImages.length === 0)
+    ) {
+      list.push(targetProject.thumbnail);
+    }
+
+    for (const img of rawImages) {
+      if (!img || list.includes(img)) continue;
+      // Do not show an image in Photo if it is already placed in More editorial blocks (unless it's a numbered lifestyle shot)
+      const isNumberedLifestyle = /-\d{2}(-[a-f0-9]+)?\.(jpg|jpeg|png|webp)$/i.test(img) && !img.includes('-block');
+      if (moreImgSet.has(img) && !isNumberedLifestyle) continue;
+      // For furniture projects (#2-#9), never show legacy -thumb white-background cutouts in Photo if lifestyle images exist
+      if (!isShowroom && rawImages.length > 1 && /-thumb(-[a-f0-9]+)?(\.[a-z0-9]+)?$/i.test(img)) continue;
+      list.push(img);
+    }
+
     return list;
   }, [targetProject]);
 
@@ -180,7 +206,7 @@ export const WorkColumn: React.FC<WorkColumnProps> = ({
                 >
                   <div className="w-full">
                     <VisualFrame
-                      src={project.thumbnail}
+                      src={project.images?.[0] || project.thumbnail || ''}
                       alt={project.title}
                       aspectRatio="auto"
                       subtitle={`${formattedIndex} / ${project.date}`}
