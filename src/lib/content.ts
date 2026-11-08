@@ -225,7 +225,10 @@ export async function syncToServer(data: {
   if (typeof window === 'undefined') return;
   const nowIso = new Date().toISOString();
   try {
-    idbSet('leehyejun_custom_meta', { updatedAt: nowIso }).catch(() => {});
+    idbSet('leehyejun_custom_meta', {
+      updatedAt: nowIso,
+      bundledVersion: BUNDLED_VERSION,
+    }).catch(() => {});
     localStorage.setItem('leehyejun_local_updated_at', nowIso);
   } catch {}
 
@@ -332,6 +335,86 @@ function isStaleProjectList(projs?: WorkProject[]): boolean {
   );
 }
 
+export function cleanProjectData(p: WorkProject): WorkProject {
+  if (!p) return p;
+  const safeSlug = (p.slug || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const isShowroom = p.slug === 'mobile-display-system';
+  const isExp = isExperienceSlug(p.slug) || (typeof p.order === 'number' && p.order >= 100);
+
+  let cleanImages = Array.isArray(p.images)
+    ? p.images.filter(
+        (img) =>
+          Boolean(img) &&
+          !img.includes('display-system-1.jpg') &&
+          !img.includes('display-system-2.jpg')
+      )
+    : [];
+
+  // Deduplicate cleanImages
+  cleanImages = Array.from(new Set(cleanImages));
+
+  const numberedPhotoRegex = new RegExp(
+    `^/images/work/${safeSlug}-\\d{2}(-[a-f0-9]+)?\\.(jpg|jpeg|png|webp)$`,
+    'i'
+  );
+  const photoSet = new Set(cleanImages);
+
+  // Clean moreBlocks: remove any numbered lifestyle shots that were auto-copied from Photo by legacy buildEditorialBlocks
+  let cleanBlocks = Array.isArray(p.moreBlocks)
+    ? p.moreBlocks.map((b) => {
+        const rawBlockImgs = Array.isArray(b?.images) ? b.images.filter(Boolean) : [];
+        const dedupedBlockImgs = Array.from(new Set(rawBlockImgs)).filter((img) => {
+          if (photoSet.has(img) && numberedPhotoRegex.test(img)) {
+            return false;
+          }
+          return true;
+        });
+        return {
+          ...b,
+          images: dedupedBlockImgs,
+        };
+      })
+    : undefined;
+
+  const moreImgSet = new Set<string>();
+  if (Array.isArray(cleanBlocks)) {
+    for (const b of cleanBlocks) {
+      for (const mImg of b.images || []) {
+        if (mImg) moreImgSet.add(mImg);
+      }
+    }
+  }
+
+  let cleanThumb = p.thumbnail || '';
+
+  if (isShowroom) {
+    // For 01. YEONHUI SHOWROOM, keep the exterior building shot at the front of images and clear separate thumbnail
+    if (cleanThumb && !cleanImages.includes(cleanThumb) && !moreImgSet.has(cleanThumb)) {
+      cleanImages = [cleanThumb, ...cleanImages];
+    }
+    cleanThumb = '';
+  } else if (!isExp) {
+    // For furniture projects (#2-#9), never keep a separate thumbnail when Photo images exist (prevents cutout duplication in Photo)
+    if (cleanImages.length > 0 || moreImgSet.has(cleanThumb)) {
+      cleanThumb = '';
+    }
+    // Also remove any image from Photo that is already placed in More blocks (unless it's a numbered lifestyle shot) or is a legacy -thumb cutout
+    cleanImages = cleanImages.filter((img) => {
+      const isNumberedLifestyle = /-\d{2}(-[a-f0-9]+)?\.(jpg|jpeg|png|webp)$/i.test(img) && !img.includes('-block');
+      if (moreImgSet.has(img) && !isNumberedLifestyle) return false;
+      if (cleanImages.length > 1 && /-thumb(-[a-f0-9]+)?(\.[a-z0-9]+)?$/i.test(img)) return false;
+      return true;
+    });
+  }
+
+  return {
+    ...p,
+    thumbnail: cleanThumb,
+    images: cleanImages,
+    moreBlocks: cleanBlocks,
+  };
+}
+
 export function getCustomProjects(): WorkProject[] {
   let list: WorkProject[] = [];
   // 1. Check in-memory cache first (if not stale)
@@ -359,26 +442,29 @@ export function getCustomProjects(): WorkProject[] {
     } catch {}
   }
 
-  // Strictly filter out any experience projects (order >= 100 or experience slugs)
-  return list.filter((p) => p && !isExperienceSlug(p.slug) && (!p.order || p.order < 100));
+  // Strictly filter out any experience projects (order >= 100 or experience slugs) and sanitize
+  return list
+    .filter((p) => p && !isExperienceSlug(p.slug) && (!p.order || p.order < 100))
+    .map(cleanProjectData);
 }
 
 export function saveCustomProject(project: WorkProject, originalSlug?: string): void {
+  const cleanedProject = cleanProjectData(project);
   const existing = getCustomProjects();
-  const targetSlug = originalSlug || project.slug;
+  const targetSlug = originalSlug || cleanedProject.slug;
 
   let replaced = false;
   // Replace in place: matching strictly by slug
   const updated = existing.map((p) => {
-    if (p.slug === targetSlug || p.slug === project.slug) {
+    if (p.slug === targetSlug || p.slug === cleanedProject.slug) {
       replaced = true;
-      return project;
+      return cleanedProject;
     }
     return p;
   });
 
   if (!replaced) {
-    updated.push(project);
+    updated.push(cleanedProject);
   }
 
   // Always keep projects strictly sorted by the explicit order number
@@ -389,14 +475,24 @@ export function saveCustomProject(project: WorkProject, originalSlug?: string): 
 
   // 2. Asynchronously save to IndexedDB (unlimited storage, no 5MB quota errors!)
   if (typeof window !== 'undefined') {
+    const nowIso = new Date().toISOString();
     idbSet('leehyejun_custom_projects', updated).catch(() => {});
+    idbSet('leehyejun_custom_meta', {
+      updatedAt: nowIso,
+      bundledVersion: BUNDLED_VERSION,
+    }).catch(() => {});
+    try {
+      localStorage.setItem('leehyejun_local_updated_at', nowIso);
+    } catch {}
   }
 
-  // 3. Attempt to save to localStorage safely
+  // 3. Attempt to save to localStorage safely; if quota exceeded, remove stale key so old snapshot never conflicts!
   try {
     localStorage.setItem('leehyejun_custom_projects', JSON.stringify(updated));
-  } catch (err) {
-    console.warn('[Storage] LocalStorage quota reached, project preserved in IndexedDB & Memory:', err);
+  } catch {
+    try {
+      localStorage.removeItem('leehyejun_custom_projects');
+    } catch {}
   }
 
   // 4. Sync full dataset to server
@@ -410,13 +506,20 @@ export function deleteCustomProject(slug: string): void {
   memoryCustomProjects = updated;
 
   if (typeof window !== 'undefined') {
+    const nowIso = new Date().toISOString();
     idbSet('leehyejun_custom_projects', updated).catch(() => {});
+    idbSet('leehyejun_custom_meta', {
+      updatedAt: nowIso,
+      bundledVersion: BUNDLED_VERSION,
+    }).catch(() => {});
   }
 
   try {
     localStorage.setItem('leehyejun_custom_projects', JSON.stringify(updated));
-  } catch (err) {
-    console.warn('LocalStorage error:', err);
+  } catch {
+    try {
+      localStorage.removeItem('leehyejun_custom_projects');
+    } catch {}
   }
   syncToServer({ projects: getAllProjects() });
 }
@@ -427,6 +530,7 @@ export function getAllProjects(): WorkProject[] {
   if (Array.isArray(custom) && custom.length > 0) {
     return custom
       .filter((p): p is WorkProject => Boolean(p && p.slug && !isExperienceSlug(p.slug) && (!p.order || p.order < 100)))
+      .map(cleanProjectData)
       .sort((a, b) => (a.order || 99) - (b.order || 99));
   }
 
@@ -455,6 +559,7 @@ export function getAllProjects(): WorkProject[] {
   const list = Array.from(projectsMap.values());
   return list
     .filter((p): p is WorkProject => Boolean(p && p.slug && !isExperienceSlug(p.slug) && (!p.order || p.order < 100)))
+    .map(cleanProjectData)
     .sort((a, b) => (a.order || 99) - (b.order || 99));
 }
 
@@ -533,13 +638,20 @@ export function saveExperienceProject(project: WorkProject): void {
   memoryExperienceProjects = updated;
 
   if (typeof window !== 'undefined') {
+    const nowIso = new Date().toISOString();
     idbSet('leehyejun_custom_experiences', updated).catch(() => {});
+    idbSet('leehyejun_custom_meta', {
+      updatedAt: nowIso,
+      bundledVersion: BUNDLED_VERSION,
+    }).catch(() => {});
   }
 
   try {
     localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(updated));
-  } catch (err) {
-    console.warn('LocalStorage error on experience project save:', err);
+  } catch {
+    try {
+      localStorage.removeItem('leehyejun_custom_experiences');
+    } catch {}
   }
 }
 
@@ -548,28 +660,37 @@ export function saveAllProjectsBatch(
   experiences: WorkProject[],
   skipNetworkSync = false
 ): void {
-  memoryCustomProjects = projects;
+  const cleanedProjects = (projects || []).map(cleanProjectData);
+  memoryCustomProjects = cleanedProjects;
   memoryExperienceProjects = experiences;
   if (typeof window !== 'undefined') {
-    idbSet('leehyejun_custom_projects', projects).catch(() => {});
+    const nowIso = new Date().toISOString();
+    idbSet('leehyejun_custom_projects', cleanedProjects).catch(() => {});
     idbSet('leehyejun_custom_experiences', experiences).catch(() => {});
-    if (!skipNetworkSync) {
-      const nowIso = new Date().toISOString();
-      idbSet('leehyejun_custom_meta', {
-        updatedAt: nowIso,
-        bundledVersion: BUNDLED_VERSION,
-      }).catch(() => {});
+    idbSet('leehyejun_custom_meta', {
+      updatedAt: nowIso,
+      bundledVersion: BUNDLED_VERSION,
+    }).catch(() => {});
+    try {
+      localStorage.setItem('leehyejun_local_updated_at', nowIso);
+    } catch {}
+    try {
+      localStorage.setItem('leehyejun_custom_projects', JSON.stringify(cleanedProjects));
+    } catch {
       try {
-        localStorage.setItem('leehyejun_local_updated_at', nowIso);
+        localStorage.removeItem('leehyejun_custom_projects');
       } catch {}
     }
     try {
-      localStorage.setItem('leehyejun_custom_projects', JSON.stringify(projects));
       localStorage.setItem('leehyejun_custom_experiences', JSON.stringify(experiences));
-    } catch {}
+    } catch {
+      try {
+        localStorage.removeItem('leehyejun_custom_experiences');
+      } catch {}
+    }
   }
   if (!skipNetworkSync) {
-    syncToServer({ projects, experiences });
+    syncToServer({ projects: cleanedProjects, experiences });
   }
 }
 
