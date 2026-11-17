@@ -1,26 +1,63 @@
 /**
  * High-definition image optimizer for portfolio display.
- * Preserves crisp 2400px Retina resolution and 0.88-0.92 JPEG quality so CAD dimension drawings,
- * typography, and fine fabric textures remain razor-sharp while keeping total JSON under GitHub's 25MB limit.
+ * Preserves crisp 2560px Retina resolution and 0.90-0.94 WebP quality (with JPEG fallback)
+ * so CAD dimension drawings, typography, and fine fabric/wood textures remain razor-sharp
+ * while keeping total JSON under GitHub's 25MB limit.
  */
+
+let cachedWebpSupport: boolean | null = null;
+
+function supportsWebpEncoding(): boolean {
+  if (cachedWebpSupport !== null) return cachedWebpSupport;
+  if (typeof document === 'undefined') {
+    cachedWebpSupport = false;
+    return false;
+  }
+  try {
+    const testCanvas = document.createElement('canvas');
+    testCanvas.width = 2;
+    testCanvas.height = 2;
+    cachedWebpSupport = testCanvas.toDataURL('image/webp', 0.92).startsWith('data:image/webp');
+  } catch {
+    cachedWebpSupport = false;
+  }
+  return cachedWebpSupport;
+}
+
+function encodeCanvas(canvas: HTMLCanvasElement, mime: string, quality: number): string {
+  if (mime === 'image/jpeg') {
+    // JPEG has no alpha channel; composite onto white so transparent PNGs never turn black
+    const opaqueCanvas = document.createElement('canvas');
+    opaqueCanvas.width = canvas.width;
+    opaqueCanvas.height = canvas.height;
+    const oCtx = opaqueCanvas.getContext('2d');
+    if (oCtx) {
+      oCtx.fillStyle = '#FFFFFF';
+      oCtx.fillRect(0, 0, opaqueCanvas.width, opaqueCanvas.height);
+      oCtx.drawImage(canvas, 0, 0);
+      return opaqueCanvas.toDataURL('image/jpeg', quality);
+    }
+  }
+  return canvas.toDataURL(mime, quality);
+}
 
 function canvasToOptimizedDataUrl(
   canvas: HTMLCanvasElement,
-  initialQuality = 0.92,
-  maxBase64Length = 480000 // ~360KB binary JPEG at 2400px (indistinguishable from original)
+  initialQuality = 0.94,
+  maxBase64Length = 1500000 // ~1.1MB binary at 2560px (razor-sharp Retina fidelity)
 ): string {
-  const mime = 'image/jpeg';
-  let dataUrl = canvas.toDataURL(mime, initialQuality);
+  const mime = supportsWebpEncoding() ? 'image/webp' : 'image/jpeg';
+  let dataUrl = encodeCanvas(canvas, mime, initialQuality);
 
-  // Gently step down quality only if exceeding maxBase64Length (never drop below 0.84 so textures/lines stay razor-sharp)
-  const qualitySteps = [0.90, 0.88, 0.86, 0.84];
+  // Gently step down quality only if exceeding maxBase64Length
+  const qualitySteps = [0.92, 0.90, 0.88, 0.86, 0.84].filter((q) => q < initialQuality);
   for (const q of qualitySteps) {
     if (dataUrl.length <= maxBase64Length) return dataUrl;
-    dataUrl = canvas.toDataURL(mime, q);
+    dataUrl = encodeCanvas(canvas, mime, q);
   }
 
-  // Only if still above budget, step dimensions to 2200px or 1920px at high quality (0.86)
-  const maxDimSteps = [2200, 1920];
+  // Only if still above budget, step dimensions gently at high quality
+  const maxDimSteps = [2200, 1920, 1680];
   for (const targetDim of maxDimSteps) {
     if (dataUrl.length <= maxBase64Length) break;
     if (canvas.width > targetDim || canvas.height > targetDim) {
@@ -30,12 +67,13 @@ function canvasToOptimizedDataUrl(
       downCanvas.height = Math.max(1, Math.round(canvas.height * scale));
       const dCtx = downCanvas.getContext('2d');
       if (dCtx) {
-        dCtx.fillStyle = '#FFFFFF';
-        dCtx.fillRect(0, 0, downCanvas.width, downCanvas.height);
         dCtx.imageSmoothingEnabled = true;
         dCtx.imageSmoothingQuality = 'high';
         dCtx.drawImage(canvas, 0, 0, downCanvas.width, downCanvas.height);
-        dataUrl = downCanvas.toDataURL(mime, 0.86);
+        dataUrl = encodeCanvas(downCanvas, mime, 0.88);
+        if (dataUrl.length > maxBase64Length) {
+          dataUrl = encodeCanvas(downCanvas, mime, 0.84);
+        }
       }
     }
   }
@@ -45,16 +83,18 @@ function canvasToOptimizedDataUrl(
 
 export async function compressImageFile(
   file: File,
-  maxDimension = 2400,
-  quality = 0.92
+  maxDimension = 2560,
+  quality = 0.94
 ): Promise<string> {
+  const maxUploadBase64 = 1500000; // ~1.1MB binary
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = reject;
     reader.onload = (e) => {
       const rawResult = e.target?.result as string;
-      // If file is already small (< 220KB), keep original data URL untouched for 100% lossless quality (especially CAD drawings)
-      if (file.size <= 220 * 1024 && rawResult.startsWith('data:image/')) {
+      // Fast passthrough for compact files (< 350KB) for 100% lossless quality (especially CAD drawings)
+      if (file.size <= 350 * 1024 && rawResult.startsWith('data:image/')) {
         resolve(rawResult);
         return;
       }
@@ -62,8 +102,22 @@ export async function compressImageFile(
       const img = new Image();
       img.onerror = () => resolve(rawResult);
       img.onload = () => {
-        let width = img.width;
-        let height = img.height;
+        const natW = img.naturalWidth || img.width;
+        const natH = img.naturalHeight || img.height;
+
+        // If already within Retina dimensions and size budget, preserve original pixel-for-pixel
+        if (
+          natW <= maxDimension &&
+          natH <= maxDimension &&
+          rawResult.length <= maxUploadBase64 &&
+          rawResult.startsWith('data:image/')
+        ) {
+          resolve(rawResult);
+          return;
+        }
+
+        let width = natW;
+        let height = natH;
 
         if (width > maxDimension || height > maxDimension) {
           if (width > height) {
@@ -85,14 +139,27 @@ export async function compressImageFile(
           return;
         }
 
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, width, height);
-
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        resolve(canvasToOptimizedDataUrl(canvas, quality));
+        // Preserve lossless PNG for line-art / CAD drawings if reasonably sized after resize
+        const isPng = file.type === 'image/png' || /\.png$/i.test(file.name);
+        if (isPng) {
+          const pngUrl = canvas.toDataURL('image/png');
+          if (pngUrl.length <= 1200000) {
+            resolve(pngUrl);
+            return;
+          }
+        }
+
+        const optimized = canvasToOptimizedDataUrl(canvas, quality, maxUploadBase64);
+        // Never replace with a larger re-encoded string when dimensions were not reduced
+        if (natW <= maxDimension && natH <= maxDimension && optimized.length >= rawResult.length) {
+          resolve(rawResult);
+          return;
+        }
+        resolve(optimized);
       };
       img.src = rawResult;
     };
@@ -106,8 +173,8 @@ export async function compressImageFile(
  */
 export async function optimizeExistingDataUrl(
   imgSrc: string,
-  maxDimension = 2400,
-  maxBase64Length = 420000
+  maxDimension = 2560,
+  maxBase64Length = 1500000
 ): Promise<string> {
   if (!imgSrc || !imgSrc.startsWith('data:image')) return imgSrc;
   // Never re-compress an image that is already within the per-image budget!
@@ -143,13 +210,11 @@ export async function optimizeExistingDataUrl(
         return;
       }
 
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, width, height);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, width, height);
 
-      const optimized = canvasToOptimizedDataUrl(canvas, 0.92, maxBase64Length);
+      const optimized = canvasToOptimizedDataUrl(canvas, 0.94, maxBase64Length);
       resolve(optimized.length < imgSrc.length ? optimized : imgSrc);
     };
     img.src = imgSrc;

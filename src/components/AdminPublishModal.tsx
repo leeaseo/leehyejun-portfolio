@@ -510,36 +510,16 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     return blob.size;
   };
 
-  const countTotalEmbeddedImages = (projs: WorkProject[], exps: WorkProject[]): number => {
-    let count = 0;
-    const checkUrl = (u?: string) => {
-      if (!u) return;
-      if (u.startsWith('data:image') || u.includes('-recovered-') || u.includes('-block')) {
-        count++;
-      }
-    };
-    const cleanedProjs = (projs || []).map(cleanProjectData);
-    for (const item of [...cleanedProjs, ...(exps || [])]) {
-      checkUrl(item.thumbnail);
-      (item.images || []).forEach(checkUrl);
-      if (Array.isArray(item.moreBlocks) && item.moreBlocks.length > 0) {
-        item.moreBlocks.forEach((b) => (b.images || []).forEach(checkUrl));
-      } else {
-        (item.processImages || []).forEach(checkUrl);
-      }
-    }
-    return Math.max(1, count);
-  };
-
   const optimizeProjectItem = async (
     rawProj: WorkProject,
-    maxBase64PerImage = 160000
+    maxBase64PerImage = 1500000,
+    maxDim = 2560
   ): Promise<WorkProject> => {
     const isExp =
       isExperienceSlug(rawProj.slug) || (typeof rawProj.order === 'number' && rawProj.order >= 100);
     const p = isExp ? rawProj : cleanProjectData(rawProj);
 
-    const embedAndOptimize = async (imgUrl: string): Promise<string> => {
+    const embedAndOptimize = async (imgUrl: string, budget = maxBase64PerImage): Promise<string> => {
       if (!imgUrl) return '';
       if (imgUrl.startsWith('data:text/') || imgUrl.startsWith('data:application/')) {
         return '';
@@ -565,28 +545,25 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         }
       }
       if (resolved.startsWith('data:image')) {
-        return await optimizeExistingDataUrl(resolved, 2400, maxBase64PerImage);
+        return await optimizeExistingDataUrl(resolved, maxDim, budget);
       }
       return resolved;
     };
 
     const embedAndOptimizeMainPhoto = async (imgUrl?: string): Promise<string> => {
       if (!imgUrl) return '';
-      const photoBudget = Math.max(Math.round(maxBase64PerImage * 1.8), 460000);
-      if (imgUrl.startsWith('data:image')) {
-        return await optimizeExistingDataUrl(imgUrl, 2560, photoBudget);
-      }
-      return await embedAndOptimize(imgUrl);
+      const photoBudget = Math.max(maxBase64PerImage, 480000);
+      return await embedAndOptimize(imgUrl, photoBudget);
     };
 
-    // VIP lossless-grade priority for middle Photo column works (thumbnail & images)
+    // High-definition preservation for both Photo column and More process/CAD blocks
     const optThumb = await embedAndOptimizeMainPhoto(p.thumbnail);
     const optImages = (await Promise.all((p.images || []).map(embedAndOptimizeMainPhoto))).filter(Boolean);
     const optBlocks = p.moreBlocks
       ? await Promise.all(
           p.moreBlocks.map(async (b) => ({
             ...b,
-            images: (await Promise.all((b.images || []).map(embedAndOptimize))).filter(Boolean),
+            images: (await Promise.all((b.images || []).map((img) => embedAndOptimize(img)))).filter(Boolean),
           }))
         )
       : undefined;
@@ -598,7 +575,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     const filteredProc = hasBlockImages
       ? rawProc.filter((img) => img && !img.startsWith('data:'))
       : rawProc;
-    const optProcessImages = (await Promise.all(filteredProc.map(embedAndOptimize))).filter(Boolean);
+    const optProcessImages = (await Promise.all(filteredProc.map((img) => embedAndOptimize(img)))).filter(Boolean);
 
     const result: WorkProject = {
       ...p,
@@ -608,6 +585,59 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       moreBlocks: optBlocks,
     };
     return isExp ? result : cleanProjectData(result);
+  };
+
+  /**
+   * Fits full portfolio JSON under GitHub's 25MB limit using largest-images-first progressive steps.
+   * Never re-compresses existing images when total size is already <= 24.3MB, and only optimizes
+   * the heaviest outliers when needed so CAD drawings and textures stay crisp.
+   */
+  const fitPayloadUnderGitHubLimit = async (
+    rawProjects: WorkProject[],
+    rawExperiences: WorkProject[],
+    aboutObj: AboutData,
+    resumeObj: ResumeData,
+    targetMaxBytes = 24.3 * 1024 * 1024
+  ) => {
+    const nowIso = new Date().toISOString();
+    const buildPayload = (projs: WorkProject[], exps: WorkProject[]) => ({
+      about: aboutObj,
+      resume: resumeObj,
+      projects: projs,
+      experiences: exps,
+      updatedAt: nowIso,
+      exportedAt: nowIso,
+    });
+
+    // Pass 1: Embed any local recovered paths, leave ALL existing images up to 2MB 100% untouched
+    let projs = await Promise.all(rawProjects.map((p) => optimizeProjectItem(p, 2000000, 2560)));
+    let exps = await Promise.all(rawExperiences.map((e) => optimizeProjectItem(e, 2000000, 2560)));
+
+    let payload = buildPayload(projs, exps);
+    let byteSize = new Blob([JSON.stringify(payload, null, 2)]).size;
+
+    const progressiveSteps: { budget: number; dim: number }[] = [
+      { budget: 1100000, dim: 2560 },
+      { budget: 850000, dim: 2560 },
+      { budget: 680000, dim: 2560 },
+      { budget: 540000, dim: 2560 },
+      { budget: 440000, dim: 2560 },
+      { budget: 360000, dim: 2400 },
+      { budget: 300000, dim: 2400 },
+      { budget: 250000, dim: 2200 },
+      { budget: 200000, dim: 2048 },
+      { budget: 165000, dim: 1920 },
+    ];
+
+    for (const step of progressiveSteps) {
+      if (byteSize <= targetMaxBytes) break;
+      projs = await Promise.all(projs.map((p) => optimizeProjectItem(p, step.budget, step.dim)));
+      exps = await Promise.all(exps.map((e) => optimizeProjectItem(e, step.budget, step.dim)));
+      payload = buildPayload(projs, exps);
+      byteSize = new Blob([JSON.stringify(payload, null, 2)]).size;
+    }
+
+    return { payload, projects: projs, experiences: exps, byteSize };
   };
 
   const handleExportData = async () => {
@@ -694,41 +724,18 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         }
       }
 
-      // 2. First pass: embed any local paths without re-compressing existing data:image strings (2MB threshold per image)
-      let standaloneProjects = await Promise.all(
-        exportProjects.map((p) => optimizeProjectItem(p, 2000000))
+      // 2. Keep original image quality whenever possible, only trimming heaviest outliers if > 24.3MB
+      const fitted = await fitPayloadUnderGitHubLimit(
+        exportProjects,
+        exportExperiences,
+        aboutForm || getAboutData(),
+        resumeForm || getResumeData()
       );
-      let standaloneExperiences = await Promise.all(
-        exportExperiences.map((e) => optimizeProjectItem(e, 2000000))
-      );
+      const standaloneProjects = fitted.projects;
+      const standaloneExperiences = fitted.experiences;
+      const fullData = fitted.payload;
 
-      // Only compress oversized images if the total JSON actually exceeds 24.4MB (GitHub limit is 25.0MB)
-      const nowCheck = new Date().toISOString();
-      const checkStr = JSON.stringify({
-        about: aboutForm || getAboutData(),
-        resume: resumeForm || getResumeData(),
-        projects: standaloneProjects,
-        experiences: standaloneExperiences,
-        updatedAt: nowCheck,
-        exportedAt: nowCheck,
-      }, null, 2);
-      const rawBytes = new Blob([checkStr]).size;
-
-      if (rawBytes > 24.4 * 1024 * 1024) {
-        const imgCount = countTotalEmbeddedImages(standaloneProjects, standaloneExperiences);
-        const dynamicBudget = Math.max(
-          135000,
-          Math.min(350000, Math.floor((23.8 * 1024 * 1024) / imgCount))
-        );
-        standaloneProjects = await Promise.all(
-          standaloneProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
-        );
-        standaloneExperiences = await Promise.all(
-          standaloneExperiences.map((e) => optimizeProjectItem(e, dynamicBudget))
-        );
-      }
-
-      // Update active editor state & IndexedDB with the slimmed-down images so future saves stay fast and compact
+      // Update active editor state & IndexedDB with the exported dataset
       setDraftProjects(standaloneProjects);
       setDraftExperiences(standaloneExperiences);
       setProjectsList(standaloneProjects);
@@ -748,16 +755,6 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
           }
         }
       }
-
-      const nowIso = new Date().toISOString();
-      const fullData = {
-        about: aboutForm || getAboutData(),
-        resume: resumeForm || getResumeData(),
-        projects: standaloneProjects,
-        experiences: standaloneExperiences,
-        updatedAt: nowIso,
-        exportedAt: nowIso,
-      };
 
       const fullJsonStr = JSON.stringify(fullData, null, 2);
       const totalBytes = new Blob([fullJsonStr]).size;
@@ -865,65 +862,16 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       );
       const rawExperiences = Array.from(mergedExpMap.values());
 
-      // First pass: keep 100% original image quality if total JSON is already <= 24.4MB!
-      let optProjects = await Promise.all(
-        rawProjects.map((p) => optimizeProjectItem(p, 2000000))
+      // Keep original image quality whenever possible, only trimming heaviest outliers if > 24.3MB
+      const fitted = await fitPayloadUnderGitHubLimit(
+        rawProjects,
+        rawExperiences,
+        mergedAbout || aboutForm || getAboutData(),
+        mergedResume || resumeForm || getResumeData()
       );
-      let optExperiences = await Promise.all(
-        rawExperiences.map((ex) => optimizeProjectItem(ex, 2000000))
-      );
+      const combinedPayload = fitted.payload;
 
-      const nowIso = new Date().toISOString();
-      let combinedPayload = {
-        about: mergedAbout || aboutForm || getAboutData(),
-        resume: mergedResume || resumeForm || getResumeData(),
-        projects: optProjects,
-        experiences: optExperiences,
-        updatedAt: nowIso,
-        exportedAt: nowIso,
-      };
-
-      let checkBytes = new Blob([JSON.stringify(combinedPayload, null, 2)]).size;
-
-      // Only compress oversized images if the merged payload exceeds 24.4MB (GitHub limit is 25.0MB)
-      if (checkBytes > 24.4 * 1024 * 1024) {
-        const imgCount = countTotalEmbeddedImages(optProjects, optExperiences);
-        let dynamicBudget = Math.max(
-          135000,
-          Math.min(350000, Math.floor((23.8 * 1024 * 1024) / imgCount))
-        );
-
-        optProjects = await Promise.all(
-          optProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
-        );
-        optExperiences = await Promise.all(
-          optExperiences.map((ex) => optimizeProjectItem(ex, dynamicBudget))
-        );
-
-        combinedPayload = {
-          ...combinedPayload,
-          projects: optProjects,
-          experiences: optExperiences,
-        };
-        checkBytes = new Blob([JSON.stringify(combinedPayload, null, 2)]).size;
-
-        if (checkBytes > 24.6 * 1024 * 1024) {
-          dynamicBudget = Math.floor(dynamicBudget * 0.85);
-          optProjects = await Promise.all(
-            optProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
-          );
-          optExperiences = await Promise.all(
-            optExperiences.map((ex) => optimizeProjectItem(ex, dynamicBudget))
-          );
-          combinedPayload = {
-            ...combinedPayload,
-            projects: optProjects,
-            experiences: optExperiences,
-          };
-        }
-      }
-
-      // Immediately download the slimmed-down (<18.5MB) custom-data.json for GitHub upload!
+      // Immediately download the GitHub-safe custom-data.json for upload!
       const newBytes = triggerJsonDownload('custom-data.json', combinedPayload);
       const oldMb = (originalTotalBytes / (1024 * 1024)).toFixed(1);
       const newMb = (newBytes / (1024 * 1024)).toFixed(1);
@@ -1036,7 +984,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       const results: string[] = [];
       for (const file of files) {
         try {
-          const comp = await compressImageFile(file, 2400, 0.92);
+          const comp = await compressImageFile(file, 2560, 0.94);
           results.push(comp);
         } catch {
           const fallback = await new Promise<string>((res) => {

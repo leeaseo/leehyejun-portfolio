@@ -450,7 +450,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     };
   }, [displaySize, aspectRatio, effectiveNatW, effectiveNatH]);
 
-  // Ultra-high definition Canvas Cropping (up to 2560px, JPEG quality 0.92)
+  // Ultra-high definition Canvas Cropping (up to 2560px, WebP quality 0.94)
   const handleApplyCrop = async () => {
     if (!imageRef.current || displaySize.width <= 0 || displaySize.height <= 0) {
       onClose();
@@ -495,8 +495,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       const sw = Math.min(transCanvas.width - sx, Math.round(crop.width * scaleX));
       const sh = Math.min(transCanvas.height - sy, Math.round(crop.height * scaleY));
 
-      // 3. Retina 1920px limit for razor-sharp product details with compact GitHub-safe file size
-      const maxDim = 1920;
+      // 3. Retina 2560px limit for razor-sharp product details & CAD drawings
+      const maxDim = 2560;
       let outW = sw;
       let outH = sh;
 
@@ -520,16 +520,13 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         return;
       }
 
-      ctx.fillStyle = '#FAF9F6';
-      ctx.fillRect(0, 0, outW, outH);
-
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
       ctx.drawImage(transCanvas, sx, sy, sw, sh, 0, 0, outW, outH);
 
-      // High-efficiency WebP/JPEG (~80KB–150KB) for pristine gallery quality & <25MB GitHub safety
-      const croppedDataUrl = canvasToOptimizedDataUrl(outCanvas, 0.84);
+      // High-definition WebP (or JPEG fallback) up to ~1.1MB for pristine gallery & CAD quality
+      const croppedDataUrl = canvasToOptimizedDataUrl(outCanvas, 0.94, 1500000);
       onCropComplete(croppedDataUrl);
     } catch (err) {
       console.error('Failed to crop image:', err);
