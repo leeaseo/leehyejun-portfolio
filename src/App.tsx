@@ -12,6 +12,7 @@ import {
   isExperienceSlug,
   saveAllProjectsBatch,
   syncToServer,
+  cleanProjectData,
   BUNDLED_VERSION,
 } from './lib/content';
 import { WorkProject, AboutData, ResumeData } from './lib/types';
@@ -143,7 +144,10 @@ export default function App() {
         idbMeta = idbMetaRes.value;
       }
 
-      const isSameBundledVersion = idbMeta?.bundledVersion === BUNDLED_VERSION;
+      const bundledTime = BUNDLED_VERSION !== 'v1' ? new Date(BUNDLED_VERSION).getTime() : 0;
+      const isSameBundledVersion = Boolean(
+        idbMeta?.bundledVersion && idbMeta.bundledVersion === BUNDLED_VERSION
+      );
       const idbTime =
         isSameBundledVersion && idbMeta?.updatedAt ? new Date(idbMeta.updatedAt).getTime() : 0;
 
@@ -157,19 +161,19 @@ export default function App() {
         isSameBundledVersion &&
         idbProjects &&
         idbProjects.length > 0 &&
-        !isStaleProjectData(idbProjects);
+        !isStaleProjectData(idbProjects) &&
+        idbTime > bundledTime;
 
-      // 1. Only use Browser IndexedDB if it was created on the CURRENT custom-data.json version AND is strictly newer
-      if (hasValidIdb && idbTime > serverTime) {
+      // 1. Use Browser IndexedDB if it was created on the CURRENT custom-data.json version AND is newer
+      if (hasValidIdb && idbTime >= serverTime) {
+        const cleanedIdb = idbProjects!.map(cleanProjectData);
         const expList =
           idbExperiences && idbExperiences.length > 0 ? idbExperiences : getExperienceProjects();
-        saveAllProjectsBatch(idbProjects!, expList, true);
-        setProjectsList(idbProjects!);
+        saveAllProjectsBatch(cleanedIdb, expList, true);
+        setProjectsList(cleanedIdb);
         setExperienceProjectsList(expList);
         return;
       }
-
-      const bundledTime = BUNDLED_VERSION !== 'v1' ? new Date(BUNDLED_VERSION).getTime() : 0;
 
       const hasValidServer =
         serverData &&
@@ -179,14 +183,15 @@ export default function App() {
         serverTime >= bundledTime;
 
       if (hasValidServer) {
+        const cleanedServer = serverData.projects.map(cleanProjectData);
         saveAllProjectsBatch(
-          serverData.projects,
+          cleanedServer,
           Array.isArray(serverData.experiences) && serverData.experiences.length > 0
             ? serverData.experiences
             : getExperienceProjects(),
           true
         );
-        setProjectsList(serverData.projects);
+        setProjectsList(cleanedServer);
 
         if (Array.isArray(serverData.experiences) && serverData.experiences.length > 0) {
           setExperienceProjectsList(serverData.experiences);

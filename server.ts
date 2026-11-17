@@ -285,6 +285,28 @@ async function startServer() {
     }
   });
 
+  // Download updated code files for 1-click GitHub upgrade
+  app.get('/api/upgrade-code/:filename', (req, res) => {
+    const allowedMap: Record<string, string> = {
+      'imageCompressor.ts': 'src/lib/imageCompressor.ts',
+      'content.ts': 'src/lib/content.ts',
+      'ImageCropperModal.tsx': 'src/components/ImageCropperModal.tsx',
+      'AdminPublishModal.tsx': 'src/components/AdminPublishModal.tsx',
+      'WorkColumn.tsx': 'src/components/WorkColumn.tsx',
+      'MoreColumn.tsx': 'src/components/MoreColumn.tsx',
+      'App.tsx': 'src/App.tsx',
+      'unpack-images.cjs': 'scripts/unpack-images.cjs',
+    };
+    const name = req.params.filename;
+    const rel = allowedMap[name];
+    if (!rel) return res.status(404).send('Not found');
+    const fullPath = path.resolve(__dirname, rel);
+    if (!fs.existsSync(fullPath)) return res.status(404).send('File not found');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    return res.send(fs.readFileSync(fullPath, 'utf-8'));
+  });
+
   // Save updated content (persists across PC, Mobile, and all visitors worldwide)
   app.post('/api/publish', async (req, res) => {
     try {

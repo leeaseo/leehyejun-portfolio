@@ -1,27 +1,26 @@
 /**
- * Smart image compressor for high-resolution web portfolio display.
- * Uses high-efficiency progressive-grade JPEG at up to 1800px (Retina-ready for 3-column layout)
- * and adaptive quality/dimension stepping so each image is razor-sharp while strictly staying
- * within the target byte budget so custom-data.json NEVER exceeds GitHub's 25MB single-file limit.
+ * High-definition image optimizer for portfolio display.
+ * Preserves crisp 2400px Retina resolution and 0.88-0.92 JPEG quality so CAD dimension drawings,
+ * typography, and fine fabric textures remain razor-sharp while keeping total JSON under GitHub's 25MB limit.
  */
 
 function canvasToOptimizedDataUrl(
   canvas: HTMLCanvasElement,
-  initialQuality = 0.82,
-  maxBase64Length = 165000 // ~120KB binary, ~165KB base64 string by default
+  initialQuality = 0.92,
+  maxBase64Length = 480000 // ~360KB binary JPEG at 2400px (indistinguishable from original)
 ): string {
   const mime = 'image/jpeg';
   let dataUrl = canvas.toDataURL(mime, initialQuality);
 
-  // Step 1: Step down JPEG quality if larger than maxBase64Length
-  const qualitySteps = [0.76, 0.70, 0.64, 0.58];
+  // Gently step down quality only if exceeding maxBase64Length (never drop below 0.84 so textures/lines stay razor-sharp)
+  const qualitySteps = [0.90, 0.88, 0.86, 0.84];
   for (const q of qualitySteps) {
     if (dataUrl.length <= maxBase64Length) return dataUrl;
     dataUrl = canvas.toDataURL(mime, q);
   }
 
-  // Step 2: If still above budget (e.g., when portfolio has 150+ photos), scale dimensions down progressively
-  const maxDimSteps = [1440, 1200, 1024];
+  // Only if still above budget, step dimensions to 2200px or 1920px at high quality (0.86)
+  const maxDimSteps = [2200, 1920];
   for (const targetDim of maxDimSteps) {
     if (dataUrl.length <= maxBase64Length) break;
     if (canvas.width > targetDim || canvas.height > targetDim) {
@@ -31,15 +30,12 @@ function canvasToOptimizedDataUrl(
       downCanvas.height = Math.max(1, Math.round(canvas.height * scale));
       const dCtx = downCanvas.getContext('2d');
       if (dCtx) {
-        dCtx.fillStyle = '#FAF9F6';
+        dCtx.fillStyle = '#FFFFFF';
         dCtx.fillRect(0, 0, downCanvas.width, downCanvas.height);
         dCtx.imageSmoothingEnabled = true;
         dCtx.imageSmoothingQuality = 'high';
         dCtx.drawImage(canvas, 0, 0, downCanvas.width, downCanvas.height);
-        dataUrl = downCanvas.toDataURL(mime, 0.72);
-        if (dataUrl.length > maxBase64Length) {
-          dataUrl = downCanvas.toDataURL(mime, 0.62);
-        }
+        dataUrl = downCanvas.toDataURL(mime, 0.86);
       }
     }
   }
@@ -49,14 +45,20 @@ function canvasToOptimizedDataUrl(
 
 export async function compressImageFile(
   file: File,
-  maxDimension = 1800,
-  quality = 0.82
+  maxDimension = 2400,
+  quality = 0.92
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = reject;
     reader.onload = (e) => {
       const rawResult = e.target?.result as string;
+      // If file is already small (< 220KB), keep original data URL untouched for 100% lossless quality (especially CAD drawings)
+      if (file.size <= 220 * 1024 && rawResult.startsWith('data:image/')) {
+        resolve(rawResult);
+        return;
+      }
+
       const img = new Image();
       img.onerror = () => resolve(rawResult);
       img.onload = () => {
@@ -83,7 +85,7 @@ export async function compressImageFile(
           return;
         }
 
-        ctx.fillStyle = '#FAF9F6';
+        ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, width, height);
 
         ctx.imageSmoothingEnabled = true;
@@ -99,17 +101,17 @@ export async function compressImageFile(
 }
 
 /**
- * Re-optimizes an existing Base64 data URL (e.g., previously uploaded 1MB~2MB un-shrunk images)
- * so the user doesn't have to re-upload existing photos to shrink custom-data.json under 25MB.
+ * Gently optimizes an oversized Base64 data URL only when it exceeds maxBase64Length.
+ * Any image already <= maxBase64Length is returned 100% untouched (zero generational loss).
  */
 export async function optimizeExistingDataUrl(
   imgSrc: string,
-  maxDimension = 1800,
-  maxBase64Length = 165000
+  maxDimension = 2400,
+  maxBase64Length = 420000
 ): Promise<string> {
   if (!imgSrc || !imgSrc.startsWith('data:image')) return imgSrc;
-  // Already compact enough and is standard jpeg
-  if (imgSrc.length <= maxBase64Length && imgSrc.startsWith('data:image/jpeg')) return imgSrc;
+  // Never re-compress an image that is already within the per-image budget!
+  if (imgSrc.length <= maxBase64Length) return imgSrc;
 
   return new Promise((resolve) => {
     const img = new Image();
@@ -141,13 +143,13 @@ export async function optimizeExistingDataUrl(
         return;
       }
 
-      ctx.fillStyle = '#FAF9F6';
+      ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, width, height);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, width, height);
 
-      const optimized = canvasToOptimizedDataUrl(canvas, 0.80, maxBase64Length);
+      const optimized = canvasToOptimizedDataUrl(canvas, 0.92, maxBase64Length);
       resolve(optimized.length < imgSrc.length ? optimized : imgSrc);
     };
     img.src = imgSrc;
@@ -156,5 +158,3 @@ export async function optimizeExistingDataUrl(
 
 export { canvasToOptimizedDataUrl };
 export const readOriginalImageFile = compressImageFile;
-
-

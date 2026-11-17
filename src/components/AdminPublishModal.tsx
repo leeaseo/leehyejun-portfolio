@@ -268,8 +268,9 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
             idbGet<WorkProject[]>('leehyejun_custom_experiences'),
             idbGet<{ updatedAt?: string; bundledVersion?: string }>('leehyejun_custom_meta'),
           ]);
-          const isCurrentVersion =
-            !idbMeta?.bundledVersion || idbMeta.bundledVersion === BUNDLED_VERSION;
+          const isCurrentVersion = Boolean(
+            idbMeta?.bundledVersion && idbMeta.bundledVersion === BUNDLED_VERSION
+          );
           if (isCurrentVersion && Array.isArray(idbProjs) && idbProjs.length > 0) {
             pList = idbProjs.map(cleanProjectData);
           }
@@ -539,37 +540,53 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     const p = isExp ? rawProj : cleanProjectData(rawProj);
 
     const embedAndOptimize = async (imgUrl: string): Promise<string> => {
-      if (!imgUrl) return imgUrl;
+      if (!imgUrl) return '';
+      if (imgUrl.startsWith('data:text/') || imgUrl.startsWith('data:application/')) {
+        return '';
+      }
       let resolved = imgUrl;
       if (!resolved.startsWith('data:') && !resolved.startsWith('http')) {
         if (resolved.includes('-recovered-') || resolved.includes('-block')) {
           try {
             const res = await fetch(resolved);
-            if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (res.ok && contentType.startsWith('image/')) {
               const blob = await res.blob();
-              resolved = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve((reader.result as string) || imgUrl);
-                reader.onerror = () => resolve(imgUrl);
-                reader.readAsDataURL(blob);
-              });
+              if (blob.type.startsWith('image/')) {
+                resolved = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve((reader.result as string) || imgUrl);
+                  reader.onerror = () => resolve(imgUrl);
+                  reader.readAsDataURL(blob);
+                });
+              }
             }
           } catch {}
         }
       }
       if (resolved.startsWith('data:image')) {
-        return await optimizeExistingDataUrl(resolved, 1800, maxBase64PerImage);
+        return await optimizeExistingDataUrl(resolved, 2400, maxBase64PerImage);
       }
       return resolved;
     };
 
-    const optThumb = await embedAndOptimize(p.thumbnail);
-    const optImages = await Promise.all((p.images || []).map(embedAndOptimize));
+    const embedAndOptimizeMainPhoto = async (imgUrl?: string): Promise<string> => {
+      if (!imgUrl) return '';
+      const photoBudget = Math.max(Math.round(maxBase64PerImage * 1.8), 460000);
+      if (imgUrl.startsWith('data:image')) {
+        return await optimizeExistingDataUrl(imgUrl, 2560, photoBudget);
+      }
+      return await embedAndOptimize(imgUrl);
+    };
+
+    // VIP lossless-grade priority for middle Photo column works (thumbnail & images)
+    const optThumb = await embedAndOptimizeMainPhoto(p.thumbnail);
+    const optImages = (await Promise.all((p.images || []).map(embedAndOptimizeMainPhoto))).filter(Boolean);
     const optBlocks = p.moreBlocks
       ? await Promise.all(
           p.moreBlocks.map(async (b) => ({
             ...b,
-            images: await Promise.all((b.images || []).map(embedAndOptimize)),
+            images: (await Promise.all((b.images || []).map(embedAndOptimize))).filter(Boolean),
           }))
         )
       : undefined;
@@ -581,7 +598,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     const filteredProc = hasBlockImages
       ? rawProc.filter((img) => img && !img.startsWith('data:'))
       : rawProc;
-    const optProcessImages = await Promise.all(filteredProc.map(embedAndOptimize));
+    const optProcessImages = (await Promise.all(filteredProc.map(embedAndOptimize))).filter(Boolean);
 
     const result: WorkProject = {
       ...p,
@@ -677,19 +694,39 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         }
       }
 
-      // 2. Calculate dynamic per-image budget so total custom-data.json is ALWAYS < 18.5MB in a single file!
-      const imgCount = countTotalEmbeddedImages(exportProjects, exportExperiences);
-      const dynamicBudget = Math.max(
-        55000,
-        Math.min(165000, Math.floor((17.5 * 1024 * 1024) / imgCount))
+      // 2. First pass: embed any local paths without re-compressing existing data:image strings (2MB threshold per image)
+      let standaloneProjects = await Promise.all(
+        exportProjects.map((p) => optimizeProjectItem(p, 2000000))
+      );
+      let standaloneExperiences = await Promise.all(
+        exportExperiences.map((e) => optimizeProjectItem(e, 2000000))
       );
 
-      const standaloneProjects = await Promise.all(
-        exportProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
-      );
-      const standaloneExperiences = await Promise.all(
-        exportExperiences.map((e) => optimizeProjectItem(e, dynamicBudget))
-      );
+      // Only compress oversized images if the total JSON actually exceeds 24.4MB (GitHub limit is 25.0MB)
+      const nowCheck = new Date().toISOString();
+      const checkStr = JSON.stringify({
+        about: aboutForm || getAboutData(),
+        resume: resumeForm || getResumeData(),
+        projects: standaloneProjects,
+        experiences: standaloneExperiences,
+        updatedAt: nowCheck,
+        exportedAt: nowCheck,
+      }, null, 2);
+      const rawBytes = new Blob([checkStr]).size;
+
+      if (rawBytes > 24.4 * 1024 * 1024) {
+        const imgCount = countTotalEmbeddedImages(standaloneProjects, standaloneExperiences);
+        const dynamicBudget = Math.max(
+          135000,
+          Math.min(350000, Math.floor((23.8 * 1024 * 1024) / imgCount))
+        );
+        standaloneProjects = await Promise.all(
+          standaloneProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
+        );
+        standaloneExperiences = await Promise.all(
+          standaloneExperiences.map((e) => optimizeProjectItem(e, dynamicBudget))
+        );
+      }
 
       // Update active editor state & IndexedDB with the slimmed-down images so future saves stay fast and compact
       setDraftProjects(standaloneProjects);
@@ -742,12 +779,44 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
     }
   };
 
+  const mergeProjectPreservingValidImages = (
+    prev: WorkProject | undefined,
+    next: WorkProject
+  ): WorkProject => {
+    if (!prev) return next;
+
+    const countDataImgs = (arr?: string[]) =>
+      (arr || []).filter((u) => typeof u === 'string' && u.startsWith('data:image')).length;
+
+    const countBlockDataImgs = (blocks?: MoreProcessBlock[]) =>
+      (blocks || []).reduce((sum, b) => sum + countDataImgs(b?.images), 0);
+
+    let mergedBlocks = next.moreBlocks;
+    const prevBlockDataCount = countBlockDataImgs(prev.moreBlocks);
+    const nextBlockDataCount = countBlockDataImgs(next.moreBlocks);
+    if (prevBlockDataCount > nextBlockDataCount && Array.isArray(prev.moreBlocks) && prev.moreBlocks.length > 0) {
+      mergedBlocks = prev.moreBlocks;
+    }
+
+    let mergedImages = next.images;
+    if (countDataImgs(prev.images) > countDataImgs(next.images) && Array.isArray(prev.images) && prev.images.length > 0) {
+      mergedImages = prev.images;
+    }
+
+    return {
+      ...prev,
+      ...next,
+      images: mergedImages,
+      moreBlocks: mergedBlocks,
+    };
+  };
+
   const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
 
     setIsCompressing(true);
-    showToast('⚡ 홈페이지 백업 파일을 불러와서 25MB 이하 안전 규격으로 자동 다이어트 중입니다...');
+    showToast('⚡ 백업 파일을 불러와서 손상 없는 고화질 복원 및 25MB 이하 안전 규격으로 변환 중입니다...');
     try {
       const files = Array.from(fileList);
       let originalTotalBytes = 0;
@@ -759,6 +828,12 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         parsedList.push(JSON.parse(text));
       }
 
+      parsedList.sort((a, b) => {
+        const tA = new Date(a?.updatedAt || a?.exportedAt || 0).getTime() || 0;
+        const tB = new Date(b?.updatedAt || b?.exportedAt || 0).getTime() || 0;
+        return tA - tB;
+      });
+
       const mergedProjectsMap = new Map<string, WorkProject>();
       const mergedExpMap = new Map<string, WorkProject>();
       let mergedAbout: AboutData | undefined;
@@ -769,12 +844,18 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         if (parsed.resume) mergedResume = parsed.resume;
         if (Array.isArray(parsed.projects)) {
           for (const p of parsed.projects) {
-            if (p && p.slug) mergedProjectsMap.set(p.slug, p);
+            if (p && p.slug) {
+              const existing = mergedProjectsMap.get(p.slug);
+              mergedProjectsMap.set(p.slug, mergeProjectPreservingValidImages(existing, p));
+            }
           }
         }
         if (Array.isArray(parsed.experiences)) {
           for (const ex of parsed.experiences) {
-            if (ex && ex.slug) mergedExpMap.set(ex.slug, ex);
+            if (ex && ex.slug) {
+              const existing = mergedExpMap.get(ex.slug);
+              mergedExpMap.set(ex.slug, mergeProjectPreservingValidImages(existing, ex));
+            }
           }
         }
       }
@@ -784,23 +865,16 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       );
       const rawExperiences = Array.from(mergedExpMap.values());
 
-      // Calculate dynamic per-image budget so the output custom-data.json is guaranteed < 18.5MB!
-      const imgCount = countTotalEmbeddedImages(rawProjects, rawExperiences);
-      const dynamicBudget = Math.max(
-        55000,
-        Math.min(165000, Math.floor((17.5 * 1024 * 1024) / imgCount))
+      // First pass: keep 100% original image quality if total JSON is already <= 24.4MB!
+      let optProjects = await Promise.all(
+        rawProjects.map((p) => optimizeProjectItem(p, 2000000))
       );
-
-      // Automatically optimize any oversized Base64 images on import
-      const optProjects = await Promise.all(
-        rawProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
-      );
-      const optExperiences = await Promise.all(
-        rawExperiences.map((ex) => optimizeProjectItem(ex, dynamicBudget))
+      let optExperiences = await Promise.all(
+        rawExperiences.map((ex) => optimizeProjectItem(ex, 2000000))
       );
 
       const nowIso = new Date().toISOString();
-      const combinedPayload = {
+      let combinedPayload = {
         about: mergedAbout || aboutForm || getAboutData(),
         resume: mergedResume || resumeForm || getResumeData(),
         projects: optProjects,
@@ -808,6 +882,46 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
         updatedAt: nowIso,
         exportedAt: nowIso,
       };
+
+      let checkBytes = new Blob([JSON.stringify(combinedPayload, null, 2)]).size;
+
+      // Only compress oversized images if the merged payload exceeds 24.4MB (GitHub limit is 25.0MB)
+      if (checkBytes > 24.4 * 1024 * 1024) {
+        const imgCount = countTotalEmbeddedImages(optProjects, optExperiences);
+        let dynamicBudget = Math.max(
+          135000,
+          Math.min(350000, Math.floor((23.8 * 1024 * 1024) / imgCount))
+        );
+
+        optProjects = await Promise.all(
+          optProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
+        );
+        optExperiences = await Promise.all(
+          optExperiences.map((ex) => optimizeProjectItem(ex, dynamicBudget))
+        );
+
+        combinedPayload = {
+          ...combinedPayload,
+          projects: optProjects,
+          experiences: optExperiences,
+        };
+        checkBytes = new Blob([JSON.stringify(combinedPayload, null, 2)]).size;
+
+        if (checkBytes > 24.6 * 1024 * 1024) {
+          dynamicBudget = Math.floor(dynamicBudget * 0.85);
+          optProjects = await Promise.all(
+            optProjects.map((p) => optimizeProjectItem(p, dynamicBudget))
+          );
+          optExperiences = await Promise.all(
+            optExperiences.map((ex) => optimizeProjectItem(ex, dynamicBudget))
+          );
+          combinedPayload = {
+            ...combinedPayload,
+            projects: optProjects,
+            experiences: optExperiences,
+          };
+        }
+      }
 
       // Immediately download the slimmed-down (<18.5MB) custom-data.json for GitHub upload!
       const newBytes = triggerJsonDownload('custom-data.json', combinedPayload);
@@ -922,7 +1036,7 @@ export const AdminPublishModal: React.FC<AdminPublishModalProps> = ({
       const results: string[] = [];
       for (const file of files) {
         try {
-          const comp = await compressImageFile(file, 1920, 0.84);
+          const comp = await compressImageFile(file, 2400, 0.92);
           results.push(comp);
         } catch {
           const fallback = await new Promise<string>((res) => {
@@ -3693,55 +3807,6 @@ ${content || '## 개요\n프로젝트 설명 내용을 작성하세요.'}
                 >
                   [깃허브 연동용 custom-data.json 백업 다운로드]
                 </button>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[rgba(0,0,0,0.06)] text-[10.5px]">
-              <span>🛠️ 중복 이미지 & 과거 이력 충돌 방지 코드 다운로드 (깃허브 업로드용):</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <a
-                  href="/api/upgrade-code/content.ts"
-                  download="content.ts"
-                  className="underline hover:text-black text-black font-mono"
-                  title="깃허브 src/lib/ 폴더에 업로드"
-                >
-                  1. content.ts (src/lib/)
-                </a>
-                <span>·</span>
-                <a
-                  href="/api/upgrade-code/WorkColumn.tsx"
-                  download="WorkColumn.tsx"
-                  className="underline hover:text-black text-black font-mono"
-                  title="깃허브 src/components/ 폴더에 업로드"
-                >
-                  2. WorkColumn.tsx (src/components/)
-                </a>
-                <span>·</span>
-                <a
-                  href="/api/upgrade-code/MoreColumn.tsx"
-                  download="MoreColumn.tsx"
-                  className="underline hover:text-black text-black font-mono"
-                  title="깃허브 src/components/ 폴더에 업로드"
-                >
-                  3. MoreColumn.tsx (src/components/)
-                </a>
-                <span>·</span>
-                <a
-                  href="/api/upgrade-code/AdminPublishModal.tsx"
-                  download="AdminPublishModal.tsx"
-                  className="underline hover:text-black text-black font-mono"
-                  title="깃허브 src/components/ 폴더에 업로드"
-                >
-                  4. AdminPublishModal.tsx (src/components/)
-                </a>
-                <span>·</span>
-                <a
-                  href="/api/upgrade-code/unpack-images.cjs"
-                  download="unpack-images.cjs"
-                  className="underline hover:text-black text-black font-mono"
-                  title="깃허브 scripts/ 폴더에 업로드"
-                >
-                  5. unpack-images.cjs (scripts/)
-                </a>
               </div>
             </div>
           </div>

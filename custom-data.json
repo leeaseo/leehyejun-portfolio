@@ -94,6 +94,7 @@
     {
       "processScope": "Product Planning · 3D/CAD Drawing · 1:1 Prototyping · Mass-Production QC",
       "images": [
+        "/images/work/mobile-display-system-thumb.jpg",
         "/images/work/mobile-display-system-01.jpg",
         "/images/work/mobile-display-system-02.jpg",
         "/images/work/mobile-display-system-03.jpg",
@@ -173,14 +174,10 @@
           "id": "block-3",
           "title": "디자인 방향성",
           "description": "- **뉴트럴 텍스처와 원목의 조화**: 원목이 가진 본연의 따뜻함과 조화를 이루는 뉴트럴 톤의 미장 및 텍스처 선정\n- **자연광과 조도 계획**: 자연광의 흐름을 고려한 창호 및 인공조명의 섬세한 조도 계획\n- **실제 주거 씬(Scene) 중심의 공간 구성**: 리빙, 다이닝, 워크스페이스 등 실제 주거의 순간들이 자연스럽게 펼쳐지는 동선 기획",
-          "images": [
-            "/images/work/mobile-display-system-06.jpg",
-            "/images/work/mobile-display-system-07.jpg",
-            "/images/work/mobile-display-system-08.jpg"
-          ]
+          "images": []
         }
       ],
-      "thumbnail": "/images/work/mobile-display-system-thumb.jpg",
+      "thumbnail": "",
       "order": 1,
       "title": "YEONHUI SHOWROOM - THE LAYER",
       "updatedAt": "2026-11-07T07:50:42.816Z"
@@ -232,17 +229,11 @@
           "description": "**Category** : Living Furniture (1-Person & 3-Person Fabric Sofa)\n**Role** : 가구 기획 및 디자인 개발, 구조 도면 설계, 1:1 프로토타입 감리 및 양산 총괄\n**Scope** :\n- 한국 거실 공간의 비례감을 고려한 등받이 비율 기획\n- 1인 및 3인 모듈 라인업 구성\n- 원목 솔리드 프레임 결구 구조 및 다리 디테일 설계\n- 고밀도 폼과 이지클린 기능성 패브릭 큐레이션 및 착석감 튜닝",
           "id": "block-1",
           "images": [
-            "/images/work/seating-for-doing-nothing-thumb.jpg",
-            "/images/work/seating-for-doing-nothing-01.jpg",
-            "/images/work/seating-for-doing-nothing-02.jpg"
+            "/images/work/seating-for-doing-nothing-thumb.jpg"
           ]
         },
         {
-          "images": [
-            "/images/work/seating-for-doing-nothing-03.jpg",
-            "/images/work/seating-for-doing-nothing-04.jpg",
-            "/images/work/seating-for-doing-nothing-05.jpg"
-          ],
+          "images": [],
           "title": "기획 배경 및 콘셉트",
           "id": "block-2",
           "description": "\"HANASI 05 — 비워낸 나무의 여백과 안온한 패브릭의 만남\"\n\n거실 중앙에 배치되었을 때도 시야를 가리지 않고 공간을 개방감 있게 확장해 주는 낮고 단정한 실루엣의 원목 소파입니다. 하나시 컬렉션 특유의 동양적이고 정갈한 선을 바탕으로, 앞모습뿐만 아니라 벽에서 떨어져 노출되는 뒷모습과 옆모습까지 하나의 완성도 높은 오브제로 기능하도록 기획했습니다."
@@ -251,11 +242,7 @@
           "title": "디자인 방향성",
           "description": "- **단정한 후면 원목 루버 구조**: 뒷공간이 트인 거실 레이아웃에서도 아름다운 공간 분할선이 되도록 세밀한 간격의 원목 살대 구조 적용\n- **로우 & 와이드 프로포션**: 좌면 높이를 안정감 있게 낮추고 깊이감을 확보하여 장시간 편안하게 몸을 기댈 수 있는 휴식성 확보\n- **모듈 확장성**: 3인 소파와 1인 소파의 조화로운 매칭을 통해 공간 규모와 라이프스타일에 맞춘 유연한 거실 씬(Scene) 구성",
           "id": "block-3",
-          "images": [
-            "/images/work/seating-for-doing-nothing-06.jpg",
-            "/images/work/seating-for-doing-nothing-07.jpg",
-            "/images/work/seating-for-doing-nothing-08.jpg"
-          ]
+          "images": []
         }
       ],
       "contribution": {
@@ -275,7 +262,7 @@
         ]
       },
       "brand": "CHALS FURNITURE (찰스퍼니처)",
-      "thumbnail": "/images/work/seating-for-doing-nothing-thumb.jpg",
+      "thumbnail": "",
       "updatedAt": "2026-11-07T07:02:59.243Z"
     },
     {
@@ -302,13 +289,13 @@
       "slug": "modular-adapter",
       "order": 3,
       "updatedAt": "2026-11-07T07:02:59.243Z",
-      "thumbnail": "/images/work/modular-adapter-thumb.jpg",
+      "thumbnail": "",
       "title": "HANASI SOFA TABLE 03",
       "content": "### 프로젝트 개요\n**Category** : Living Furniture (Center Table / Coffee Table)\n**Role** : 가구 기획 및 디자인 개발, 소재별(유리/사틴/우드) 상판 결구 도면 설계, 양산 감리\n**Scope** :\n- 3가지 상판 옵션(투명유리 / 사틴유리 / 합판) 구조 설계\n- 하부 수납 선반과 원목 다리의 간결한 연결 조인트 기획\n- 소파 좌면 높이와 조화를 이루는 로우 테이블 비례 세팅\n- 투명도와 질감에 따른 거실 공간 분위기 연출성 검증\n\n### 기획 배경 및 콘셉트\n\"HANASI 03 — 빛과 그림자가 투과되는 여백의 테이블\"\n\n거실의 중심에서 소파와 러그 사이를 부드럽게 이어주는 로우 소파테이블입니다. 하나시 컬렉션의 정갈한 직선미를 계승하면서도 상판 소재의 다양성을 통해 공간의 무드를 사용자의 취향에 맞게 선택할 수 있도록 설계했습니다.\n\n### 디자인 방향성\n- **3-Type 커스텀 상판 시스템**: 시원한 개방감의 클리어 투명유리, 은은하고 차분한 빛의 산란을 주는 사틴유리, 따뜻한 원목 감성의 우드 합판 상판 3종 라인업 전개\n- **하부 오픈 수납 선반**: 리모컨, 매거진, 북 등 자주 쓰는 소품을 깔끔하게 정돈할 수 있는 하부 선반 구조 적용\n- **간결하고 견고한 오크 원목 프레임**: 군더더기 없는 슬림한 선을 유지하면서도 일상적 하중을 견고하게 지지하는 정밀 결구 적용"
     },
     {
       "dimensions": "1600 / 1800 / 2000(W) × 850(D) × 740(H) mm",
-      "thumbnail": "/images/work/0-thumb.jpg",
+      "thumbnail": "",
       "updatedAt": "2026-11-07T07:02:59.243Z",
       "images": [
         "/images/work/0-01.jpg",
@@ -331,7 +318,7 @@
       "materials": "White Oak (화이트오크 원목), Italian Porcelain Ceramic Top (포세린 세라믹)"
     },
     {
-      "thumbnail": "/images/work/tactile-interface-thumb.jpg",
+      "thumbnail": "",
       "content": "### 프로젝트 개요\n**Category** : Living Furniture (Curved & Volumetric Fabric Sofa)\n**Role** : 소프트 볼륨 폼 패턴 개발, 팔걸이 곡면 봉제 라인 설계, 착석감 및 텐션 튜닝\n**Scope** :\n- 인체 굴곡을 감싸는 라운드 등받이 곡률 및 볼륨 모델링\n- 장시간 착석 시에도 꺼짐 없는 고탄성 복합 레이어 폼 설계\n- 내구성 높은 프리미엄 텍스처 패브릭 큐레이션\n- 단독 3인 구성 및 1인 암체어와의 유기적인 매칭 연출\n\n### 기획 배경 및 콘셉트\n\"BELLINA 04 — 부드러운 곡선이 주는 시각적 포근함과 깊은 휴식\"\n\n공간에 부드러운 유기적 리듬감을 불어넣는 라운드 실루엣의 패브릭 소파입니다. 직선 위주의 현대 주거 공간에서 모서리를 부드럽게 감싸 안는 곡선형 디자인을 통해 공간의 시각적 긴장감을 완화하고, 구름 위에 앉은 듯한 안락한 휴식을 제공합니다.\n\n### 디자인 방향성\n- **일체형 라운드 쿠셔닝**: 등받이에서 팔걸이로 자연스럽게 이어지는 완만한 곡면 일체형 구조로 어느 각도에서도 유려한 심미성 확보\n- **딥 시팅(Deep Seating) 구조**: 넉넉한 깊이감으로 다리를 올리거나 눕는 등 자유로운 휴식 자세를 수용하는 라운지 레이아웃\n- **모던 뉴트럴 텍스처**: 빛의 각도에 따라 입체감을 더하는 고급 패브릭 직조로 거실 전체에 깊이감 있는 질감 부여",
       "updatedAt": "2026-11-07T07:02:59.243Z",
       "images": [
@@ -360,7 +347,7 @@
       "content": "### 프로젝트 개요\n**Category** : Living Furniture (Solid Wood Low Coffee Table)\n**Role** : 3대 수종(월넛/오크/블랙) 피니시 기획, 모서리 라운딩 가공 및 구조 설계\n**Scope** :\n- 수종별(월넛·화이트오크·블랙오크) 마감재 발색 및 샌딩 퀄리티 감리\n- 얇은 원목 상판의 휨 방지를 위한 하부 철물 보강 구조 설계\n- 바닥면과 접하는 다리 라인의 테이퍼드(Tapered) 디테일 개발\n- 소형 평수부터 대형 거실까지 아우르는 콤팩트 와이드 비례 구현\n\n### 기획 배경 및 콘셉트\n\"HANASI 04 — 나무 본연의 나뭇결과 묵직한 조형미의 균형\"\n\n최고급 하드우드의 아름다운 나뭇결을 오롯이 느낄 수 있는 슬림 & 솔리드 소파테이블입니다. 공간의 톤앤매너에 맞추어 깊이 있는 월넛, 화사한 내추럴 오크, 모던하고 시크한 블랙 오크 중 선택할 수 있도록 3종의 아이덴티티를 확립했습니다.\n\n### 디자인 방향성\n- **3가지 시그니처 컬러웨이**: 자연스러운 붉은기와 짙은 브라운이 고급스러운 월넛, 밝고 온화한 오크, 나뭇결이 은은하게 드러나는 매트 블랙 피니시\n- **섬세한 에지(Edge) 가공**: 손이 닿는 상판 가장자리를 부드러운 라운드로 가공하여 안전성과 감성적인 터치감 동시 확보\n- **단단하고 안정적인 다리 프레임**: 상판 하부로 안정감 있게 뻗어나가는 다리 각도 설계를 통해 흔들림 없는 완벽한 구조적 안정성 실현",
       "title": "HANASI SOFA TABLE 04",
       "order": 6,
-      "thumbnail": "/images/work/project-1791238590387-thumb.jpg",
+      "thumbnail": "",
       "dimensions": "1100(W) × 550(D) × 360(H) mm",
       "slug": "project-1791238590387",
       "materials": "North American Walnut / White Oak / Black Finished Oak",
@@ -383,7 +370,7 @@
       ]
     },
     {
-      "thumbnail": "/images/work/project-1791239900307-thumb.jpg",
+      "thumbnail": "",
       "order": 7,
       "slug": "project-1791239900307",
       "content": "### 프로젝트 개요\n**Category** : Dining & Workspace Chair (Armless #13 & Armrest #14)\n**Role** : 의자 3D 곡면 밴딩 등받이 설계, 목공 조인트 결구 디테일 개발, 착석감 튜닝\n**Scope** :\n- 13번 암리스(Armless)와 14번 암체어(Armrest) 패밀리 라인업 동시 기획\n- 허리를 안정감 있게 감싸는 3D 성형 곡면 원목 등받이 곡률 설계\n- 장시간 식사 및 업무 착석 시 체압을 고르게 분산하는 좌판 인체공학 설계\n- 테이블 하부로 쏙 들어가는 콤팩트한 체어 스케일 조율\n\n### 기획 배경 및 콘셉트\n\"HANASI 13 & 14 — 가볍고 단정한 선 속에 담긴 안락한 착석감\"\n\n하나시 테이블 시리즈와 완벽한 조화를 이루는 원목 의자 라인업입니다. 팔걸이가 없어 공간 활용도가 높고 출입이 자유로운 13번 의자와, 팔을 편안하게 얹을 수 있는 14번 암체어를 함께 구성하여 다이닝 공간에 리듬감 있는 배치를 유도했습니다.\n\n### 디자인 방향성\n- **3D 성형 등받이 곡면**: 사람의 등뼈와 날개뼈 라인에 맞춰 완만하게 굽어지는 원목 벤딩 기법을 적용해 원목 의자 특유의 단단함을 잊게 하는 편안함 선사\n- **자연스러운 팔걸이 연장선 (14번 암체어)**: 등받이에서 팔걸이로 끊김 없이 매끄럽게 이어지는 곡면 라인으로 조형미와 안락함 극대화\n- **정밀 장부 맞춤 결구**: 나사 노출을 최소화하고 원목과 원목이 단단히 맞물리는 전통 결구 방식을 현대적으로 재해석하여 오랜 내구성 보증",
@@ -413,7 +400,7 @@
       "materials": "White Oak (화이트오크 원목), Ergonomic Curved Backrest"
     },
     {
-      "thumbnail": "/images/work/eter-thumb.jpg",
+      "thumbnail": "",
       "title": "HANASI TABLE 11",
       "dimensions": "1400 / 1600 / 1800 / 2000(W) × 800(D) × 740(H) mm",
       "order": 8,
@@ -468,7 +455,7 @@
         "/images/work/fgh-14.jpg"
       ],
       "updatedAt": "2026-11-07T07:02:59.243Z",
-      "thumbnail": "/images/work/fgh-thumb.jpg",
+      "thumbnail": "",
       "content": "### 프로젝트 개요\n**Category** : Living & Study Furniture (Modular Bookcase & Storage System)\n**Role** : 모듈러 책장 및 수납 시스템 기획, 하중 분산 선반 구조 설계, 1:1 결구 감리\n**Scope** :\n- 공간 규모와 벽면 길이에 맞춰 자유롭게 확장 가능한 그리드 모듈 시스템 기획\n- 무거운 서적 하중을 견고하게 지지하는 원목 선반 및 수직 프레임 결구 설계\n- 오픈형 선반과 도어형 하부 수납 유닛의 유기적인 조합 구성\n- 서재, 거실, 오피스 등 다양한 공간에 어울리는 고급 원목 피니시 적용\n\n### 기획 배경 및 콘셉트\n\"MILEDY 02 — 책과 오브제가 공간의 조형이 되는 모듈러 서가\"\n\n공간의 크기와 사용자의 수납 라이프스타일에 맞추어 단독 또는 무한 확장이 가능한 모듈형 책장 시스템입니다. 하나시 및 벨리나 라인업과 어우러지는 단정한 원목 비례감 속에 다양한 크기의 책과 감각적인 오브제를 리듬감 있게 진열할 수 있도록 설계했습니다.\n\n### 디자인 방향성\n- **유연한 그리드 모듈러 확장성**: 단독 1열 유닛부터 거실 및 서재 벽면 전체를 채우는 와이드 구성까지 유연하게 확장 가능한 그리드 구조\n- **고하중 분산 원목 결구**: 장시간 무거운 양장본과 도자 오브제를 올려두어도 선반 처짐 현상이 발생하지 않도록 견고하게 하중을 분산하는 인터로킹 조인트\n- **미니멀 파사드 & 히든 조인트**: 나사 노출을 최소화하고 정갈한 원목 라인을 살려 오브제와 책 본연의 조형미가 돋보이도록 마감",
       "dimensions": "Modular System (W 800/1600/2400 × D 350 × H 1950 mm)"
     }
